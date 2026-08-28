@@ -51,35 +51,26 @@ export const initialUsers: User[] = [
   },
 ];
 
-export const initialFinancialYears: FinancialYear[] = [
-  {
-    id: 1,
-    start_year: 2025,
-    end_year: 2026,
-    display_name: '2025-26',
-    start_date: '2025-04-01',
-    end_date: '2026-03-31',
-    is_active: true,
-  },
-  {
-    id: 2,
-    start_year: 2026,
-    end_year: 2027,
-    display_name: '2026-27',
-    start_date: '2026-04-01',
-    end_date: '2027-03-31',
-    is_active: true,
-  },
-  {
-    id: 3,
-    start_year: 2027,
-    end_year: 2028,
-    display_name: '2027-28',
-    start_date: '2027-04-01',
-    end_date: '2028-03-31',
-    is_active: true,
-  },
-];
+const generate30YearsFYs = (): FinancialYear[] => {
+  const list: FinancialYear[] = [];
+  let id = 1;
+  for (let y = 2024; y <= 2056; y++) {
+    const nextY = y + 1;
+    const displayName = `${y}-${String(nextY).slice(2)}`;
+    list.push({
+      id: id++,
+      start_year: y,
+      end_year: nextY,
+      display_name: displayName,
+      start_date: `${y}-04-01`,
+      end_date: `${nextY}-03-31`,
+      is_active: true,
+    });
+  }
+  return list;
+};
+
+export const initialFinancialYears: FinancialYear[] = generate30YearsFYs();
 
 export const initialClients: Client[] = [
   {

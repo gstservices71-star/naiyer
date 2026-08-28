@@ -11,28 +11,30 @@ import {
   FileUp,
   FileDown,
   Settings,
-  Download,
   Receipt,
   X,
+  LogOut,
+  Landmark,
 } from 'lucide-react';
 
 export type TabType =
   | 'dashboard'
   | 'clients'
   | 'monthly-work'
+  | 'bank-turnover'
   | 'reports'
   | 'financial-years'
   | 'users'
   | 'activity-logs'
   | 'import'
   | 'export'
-  | 'settings'
-  | 'hostinger-package';
+  | 'settings';
 
 interface SidebarProps {
   activeTab: TabType;
   onSelectTab: (tab: TabType) => void;
   currentUser: User;
+  onLogout: () => void;
   clientCount: number;
   pendingCount: number;
   isOpen: boolean;
@@ -43,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
   currentUser,
+  onLogout,
   clientCount,
   pendingCount,
   isOpen,
@@ -54,7 +57,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard, badge: null },
     { id: 'clients' as TabType, label: 'Master Clients', icon: Users, badge: clientCount },
     { id: 'monthly-work' as TabType, label: 'Monthly GST Work', icon: CalendarCheck2, badge: pendingCount > 0 ? `${pendingCount} pending` : null, badgeColor: 'bg-amber-100 text-amber-800' },
-    { id: 'reports' as TabType, label: 'Reports & Analytics', icon: FileSpreadsheet, badge: null },
+    { id: 'bank-turnover' as TabType, label: 'Bank Turnover', icon: Landmark, badge: '5 Banks', badgeColor: 'bg-indigo-500/20 text-indigo-300' },
+    { id: 'reports' as TabType, label: 'Reports & PDF', icon: FileSpreadsheet, badge: 'PDF', badgeColor: 'bg-blue-500/20 text-blue-300' },
   ];
 
   const adminItems = [
@@ -172,29 +176,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           <div className="pt-4 px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            System & Deployment
+            System & Settings
           </div>
-
-          <button
-            id="sidebar-tab-hostinger-package"
-            onClick={() => {
-              onSelectTab('hostinger-package');
-              onClose();
-            }}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'hostinger-package'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Download className="w-4 h-4" />
-              <span>Hostinger Package</span>
-            </div>
-            <span className="text-[10px] bg-emerald-900 text-emerald-200 border border-emerald-700 px-1.5 py-0.2 rounded font-mono">
-              ZIP
-            </span>
-          </button>
 
           <button
             id="sidebar-tab-settings"
@@ -213,12 +196,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Footer info */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/50">
+        {/* Footer info & Logout */}
+        <div className="p-3 border-t border-slate-800 bg-slate-950/50 space-y-2">
           <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span>Role: <strong className="text-slate-200 uppercase">{currentUser.role}</strong></span>
-            <span className="text-emerald-400 font-mono text-[10px]">PHP 8+ Ready</span>
+            <span className="text-emerald-400 font-medium text-[10px]">Active Session</span>
           </div>
+
+          <button
+            id="sidebar-logout-btn"
+            onClick={onLogout}
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-800/80 hover:bg-rose-900/50 text-slate-300 hover:text-rose-200 text-xs font-semibold border border-slate-700/60 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out / Lock</span>
+          </button>
         </div>
       </aside>
     </>

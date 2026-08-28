@@ -23,6 +23,8 @@ import {
   Layers,
   HelpCircle,
   ShieldCheck,
+  Landmark,
+  FileText,
 } from 'lucide-react';
 import {
   PieChart,
@@ -518,16 +520,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
 
             <button
-              onClick={() => onNavigateTab('reports')}
-              className="w-full text-left p-3 rounded-xl border border-slate-100 hover:border-purple-200 hover:bg-purple-50/50 transition-colors flex items-center justify-between text-xs font-semibold text-slate-800"
+              onClick={() => onNavigateTab('bank-turnover')}
+              className="w-full text-left p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors flex items-center justify-between text-xs font-semibold text-slate-800"
             >
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4" />
+                <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                  <Landmark className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="font-bold">Analytics & Export</div>
-                  <div className="text-[10px] text-slate-500 font-normal">Staff workload & monthly CSV</div>
+                  <div className="font-bold">Bank Turnover (5 Accounts)</div>
+                  <div className="text-[10px] text-slate-500 font-normal">12-month compliance & ZIP backups</div>
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            <button
+              onClick={() => onNavigateTab('reports')}
+              className="w-full text-left p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-colors flex items-center justify-between text-xs font-semibold text-slate-800"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold">Turnover Reports & PDF</div>
+                  <div className="text-[10px] text-slate-500 font-normal">GST & Bank Turnover PDF generation</div>
                 </div>
               </div>
               <ArrowRight className="w-3.5 h-3.5 text-slate-400" />

@@ -16,6 +16,7 @@ import {
 interface NavbarProps {
   currentUser: User;
   onSwitchUser: (user: User) => void;
+  onLogout: () => void;
   users: User[];
   financialYears: FinancialYear[];
   selectedFY: FinancialYear;
@@ -23,13 +24,13 @@ interface NavbarProps {
   selectedMonth: string;
   onSelectMonth: (month: string) => void;
   onToggleSidebar: () => void;
-  onOpenHostingerModal: () => void;
   companyName: string;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onSwitchUser,
+  onLogout,
   users,
   financialYears,
   selectedFY,
@@ -37,7 +38,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   selectedMonth,
   onSelectMonth,
   onToggleSidebar,
-  onOpenHostingerModal,
   companyName,
 }) => {
   return (
@@ -110,18 +110,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </select>
           </div>
 
-          {/* Hostinger Package Deployer Button */}
-          <button
-            id="hostinger-package-header-btn"
-            onClick={onOpenHostingerModal}
-            className="hidden md:flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-xs transition-all"
-            title="Download Hostinger PHP/MySQL Package"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Hostinger Package</span>
-            <span className="bg-emerald-800/60 text-[10px] px-1.5 py-0.2 rounded-full font-mono">PHP</span>
-          </button>
-
           {/* User Profile & Role Switcher */}
           <div className="relative group">
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 cursor-pointer hover:bg-slate-100 transition-colors">
@@ -172,18 +160,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               ))}
 
-              <div className="border-t border-slate-100 mt-1 pt-1">
+              <div className="border-t border-slate-100 mt-1 pt-1 space-y-0.5">
                 <button
-                  id="hostinger-package-dropdown-btn"
-                  onClick={onOpenHostingerModal}
-                  className="w-full text-left px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 font-semibold"
+                  id="user-logout-dropdown-btn"
+                  onClick={onLogout}
+                  className="w-full text-left px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 flex items-center gap-1.5 font-semibold rounded-md transition-colors"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Hostinger PHP Code & SQL</span>
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out / Logout</span>
                 </button>
               </div>
             </div>
           </div>
+
+          {/* Direct Logout Icon Button */}
+          <button
+            id="navbar-logout-btn"
+            onClick={onLogout}
+            title="Sign Out / Lock Session"
+            className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </header>

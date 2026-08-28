@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'staff';
+export type UserRole = 'admin' | 'staff' | 'user';
 
 export interface User {
   id: number;
@@ -6,11 +6,13 @@ export interface User {
   email: string;
   mobile: string;
   username: string;
+  password?: string;
   password_hash?: string;
   role: UserRole;
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
+  last_login?: string | null;
 }
 
 export type GSTType = 'regular' | 'composition';
@@ -182,3 +184,102 @@ export const STATUS_COLORS: Record<WorkStatus, { bg: string; text: string; borde
     badge: 'bg-slate-100 text-slate-800 border border-slate-300',
   },
 };
+
+// ==========================================
+// BANK TURNOVER MANAGEMENT TYPES (NEW FEATURE)
+// ==========================================
+export type BankAccountSlot = 1 | 2 | 3 | 4 | 5;
+export type BankAccountType = 'Current' | 'Savings' | 'OD/CC' | 'Cash Credit' | 'Other';
+export type BankAccountStatus = 'active' | 'inactive';
+
+export interface ClientBankAccount {
+  id: number;
+  client_id: number;
+  slot_number: BankAccountSlot;
+  bank_name: string;
+  account_number: string;
+  account_holder_name: string;
+  account_type: BankAccountType;
+  ifsc: string;
+  status: BankAccountStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientBankTurnover {
+  id: number;
+  client_id: number;
+  bank_account_id: number;
+  financial_year_id: number;
+  month: string; // e.g. "April", "May", ... "March"
+  turnover_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BankStatementBackup {
+  id: number;
+  client_id: number;
+  bank_account_id: number;
+  financial_year_id: number;
+  file_name: string;
+  stored_file_name: string;
+  file_path?: string;
+  file_size: number;
+  file_data_base64?: string;
+  uploaded_at: string;
+  uploaded_by: number;
+  uploaded_by_name?: string;
+}
+
+export interface BankAccountTurnoverSummary {
+  bankAccount: ClientBankAccount;
+  monthlyTurnover: Record<string, number>;
+  annualTotal: number;
+  backupStatement?: BankStatementBackup;
+}
+
+// ==========================================
+// GST MONTHLY TURNOVER TYPES (TAXABLE + EXEMPT)
+// ==========================================
+export interface ClientGstTurnover {
+  id: number;
+  client_id: number;
+  financial_year_id: number;
+  month: string; // "April", "May", ... "March"
+  taxable_turnover: number;
+  exempt_turnover: number;
+  total_gst_turnover: number; // taxable_turnover + exempt_turnover
+  created_at: string;
+  updated_at: string;
+}
+
+export type ReportType =
+  | 'combined' // Client Financial Report (Combined Bank + GST)
+  | 'gst' // GST Turnover Report Only
+  | 'bank' // Bank Turnover Report Only
+  | 'all_clients'; // All Clients Combined Financial Report
+
+export interface FinancialReportData {
+  client: Client;
+  financialYear: FinancialYear;
+  gstRows: {
+    month: string;
+    taxable: number;
+    exempt: number;
+    total: number;
+  }[];
+  gstTotals: {
+    taxable: number;
+    exempt: number;
+    total: number;
+  };
+  bankAccounts: {
+    slotNumber: BankAccountSlot;
+    account: ClientBankAccount | null;
+    monthlyTurnover: Record<string, number>;
+    total: number;
+  }[];
+  totalBankTurnover: number;
+}
+

@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
+  Landmark,
 } from 'lucide-react';
 
 interface ClientsListProps {
@@ -33,6 +34,7 @@ interface ClientsListProps {
   onOpenImportModal: () => void;
   onExportCSV: () => void;
   onNavigateToMonthlyWork: (clientGSTIN?: string) => void;
+  onNavigateToBankTurnover?: (clientId: number) => void;
 }
 
 export const ClientsList: React.FC<ClientsListProps> = ({
@@ -49,6 +51,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
   onOpenImportModal,
   onExportCSV,
   onNavigateToMonthlyWork,
+  onNavigateToBankTurnover,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterScheme, setFilterScheme] = useState('all');
@@ -409,10 +412,21 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                             id={`client-view-btn-${client.id}`}
                             onClick={() => onOpenViewClient(client)}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                            title="View Full Profile & 12-Month Matrix"
+                            title="View Full Profile, Bank Turnover & GST Matrix"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+
+                          {onNavigateToBankTurnover && (
+                            <button
+                              id={`client-bank-btn-${client.id}`}
+                              onClick={() => onNavigateToBankTurnover(client.id)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              title="Manage Monthly Bank Turnover"
+                            >
+                              <Landmark className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           <button
                             id={`client-tracker-btn-${client.id}`}

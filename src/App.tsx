@@ -17,15 +17,18 @@ import { ClientsList } from './components/ClientsList';
 import { MonthlyWork } from './components/MonthlyWork';
 import { FinancialYears } from './components/FinancialYears';
 import { StaffManagement } from './components/StaffManagement';
+import { UserManagement } from './components/UserManagement';
+import { UserDashboard } from './components/UserDashboard';
+import { LoginPage } from './components/LoginPage';
 import { Reports } from './components/Reports';
 import { ActivityLogs } from './components/ActivityLogs';
 import { SettingsModal } from './components/SettingsModal';
 import { ClientFormModal } from './components/ClientFormModal';
 import { ClientProfileModal } from './components/ClientProfileModal';
 import { CsvImportModal } from './components/CsvImportModal';
-import { HostingerPackageModal } from './components/HostingerPackageModal';
+import { BankTurnover } from './components/BankTurnover';
 import { AnimatePresence, motion } from 'motion/react';
-import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, ShieldAlert, ArrowLeft } from 'lucide-react';
 
 export default function App() {
   // Global State
@@ -49,11 +52,11 @@ export default function App() {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isHostingerModalOpen, setIsHostingerModalOpen] = useState(false);
 
   // Routing query filter to monthly work
   const [monthlyWorkSearch, setMonthlyWorkSearch] = useState('');
   const [monthlyWorkStatusFilter, setMonthlyWorkStatusFilter] = useState('all');
+  const [selectedBankClientId, setSelectedBankClientId] = useState<number | null>(null);
 
   // Toasts
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -88,7 +91,25 @@ export default function App() {
     setCurrentUser(loadedCurUser);
   }, []);
 
-  if (!currentUser || !selectedFY || !settings) {
+  // Handlers for Login & Session
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    setActiveTab('dashboard');
+    showToast(`Welcome back, ${user.name}! (${user.role.toUpperCase()})`, 'success');
+  };
+
+  const handleLogout = () => {
+    GSTStorage.logout();
+    setCurrentUser(null);
+    showToast('You have been logged out securely.', 'info');
+  };
+
+  // Check login guard: If not logged in, render the secure Login Page
+  if (!currentUser) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  if (!selectedFY || !settings) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center font-sans">
         <div className="text-center space-y-3">
@@ -116,7 +137,7 @@ export default function App() {
   const handleSwitchUser = (user: User) => {
     setCurrentUser(user);
     GSTStorage.setCurrentUser(user);
-    showToast(`Switched active user to ${user.name} (${user.role.toUpperCase()})`, 'info');
+    showToast(`Switched active session to ${user.name} (${user.role.toUpperCase()})`, 'info');
   };
 
   const handleSaveClient = (
@@ -182,12 +203,60 @@ export default function App() {
     return res;
   };
 
-  const handleAddUser = (userData: Omit<User, 'id' | 'created_at' | 'updated_at'>) => {
+  const handleAddUser = (
+    userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { confirmPassword?: string }
+  ) => {
     const res = GSTStorage.addUser(userData);
     if (res.success) {
       setUsers(GSTStorage.getUsers());
       setActivityLogs(GSTStorage.getActivityLogs());
       showToast(`User account for ${userData.name} created!`);
+    }
+    return res;
+  };
+
+  const handleUpdateUser = (
+    id: number,
+    userData: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>> & { newPassword?: string }
+  ) => {
+    const res = GSTStorage.updateUser(id, userData);
+    if (res.success) {
+      setUsers(GSTStorage.getUsers());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast('User details updated successfully!');
+    }
+    return res;
+  };
+
+  const handleToggleUserStatus = (id: number) => {
+    const res = GSTStorage.toggleUserStatus(id);
+    if (res.success) {
+      setUsers(GSTStorage.getUsers());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast(`User status updated to ${res.newStatus?.toUpperCase()}`);
+    }
+    return res;
+  };
+
+  const handleDeleteUser = (id: number) => {
+    const res = GSTStorage.deleteUser(id);
+    if (res.success) {
+      setUsers(GSTStorage.getUsers());
+      setClients(GSTStorage.getClients());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast('User deleted successfully.');
+    }
+    return res;
+  };
+
+  const handleResetUserPassword = (id: number, newPass: string) => {
+    const target = users.find((u) => u.id === id);
+    if (!target) return { success: false, error: 'User not found' };
+    const res = GSTStorage.resetPassword(target.username, newPass);
+    if (res.success) {
+      setUsers(GSTStorage.getUsers());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast(`Password reset for ${target.name}`);
     }
     return res;
   };
@@ -353,6 +422,7 @@ export default function App() {
       <Navbar
         currentUser={currentUser}
         onSwitchUser={handleSwitchUser}
+        onLogout={handleLogout}
         users={users}
         financialYears={financialYears}
         selectedFY={selectedFY}
@@ -360,7 +430,6 @@ export default function App() {
         selectedMonth={selectedMonth}
         onSelectMonth={handleSelectMonth}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-        onOpenHostingerModal={() => setIsHostingerModalOpen(true)}
         companyName={settings.company_name}
       />
 
@@ -374,13 +443,12 @@ export default function App() {
               setIsImportModalOpen(true);
             } else if (tab === 'export') {
               handleExportClientsCSV();
-            } else if (tab === 'hostinger-package') {
-              setIsHostingerModalOpen(true);
             } else {
               setActiveTab(tab);
             }
           }}
           currentUser={currentUser}
+          onLogout={handleLogout}
           clientCount={clients.length}
           pendingCount={pendingCount}
           isOpen={isSidebarOpen}
@@ -389,30 +457,47 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1 p-4 md:p-6 overflow-y-auto max-w-full">
+          {/* Dashboard Tab: Admin vs Staff */}
           {activeTab === 'dashboard' && (
-            <Dashboard
-              clients={clients}
-              monthlyWork={monthlyWork}
-              financialYears={financialYears}
-              selectedFY={selectedFY}
-              selectedMonth={selectedMonth}
-              users={users}
-              activityLogs={activityLogs}
-              onNavigateTab={(tab, filterStatus) => {
-                if (filterStatus) {
-                  setMonthlyWorkStatusFilter(filterStatus);
-                } else {
-                  setMonthlyWorkStatusFilter('all');
-                }
-                setMonthlyWorkSearch('');
-                setActiveTab(tab);
-              }}
-              onOpenAddClient={() => {
-                setEditingClient(null);
-                setIsAddClientModalOpen(true);
-              }}
-              onOpenImportModal={() => setIsImportModalOpen(true)}
-            />
+            currentUser.role === 'admin' ? (
+              <Dashboard
+                clients={clients}
+                monthlyWork={monthlyWork}
+                financialYears={financialYears}
+                selectedFY={selectedFY}
+                selectedMonth={selectedMonth}
+                users={users}
+                activityLogs={activityLogs}
+                onNavigateTab={(tab, filterStatus) => {
+                  if (filterStatus) {
+                    setMonthlyWorkStatusFilter(filterStatus);
+                  } else {
+                    setMonthlyWorkStatusFilter('all');
+                  }
+                  setMonthlyWorkSearch('');
+                  setActiveTab(tab);
+                }}
+                onOpenAddClient={() => {
+                  setEditingClient(null);
+                  setIsAddClientModalOpen(true);
+                }}
+                onOpenImportModal={() => setIsImportModalOpen(true)}
+              />
+            ) : (
+              <UserDashboard
+                currentUser={currentUser}
+                clients={clients}
+                monthlyWork={monthlyWork}
+                selectedFY={selectedFY}
+                selectedMonth={selectedMonth}
+                onSelectMonth={handleSelectMonth}
+                onNavigateToMonthlyWork={(filter) => {
+                  if (filter) setMonthlyWorkStatusFilter(filter);
+                  setActiveTab('monthly-work');
+                }}
+                onUpdateStatus={handleUpdateStatus}
+              />
+            )
           )}
 
           {activeTab === 'clients' && (
@@ -440,6 +525,10 @@ export default function App() {
                 setMonthlyWorkStatusFilter('all');
                 setActiveTab('monthly-work');
               }}
+              onNavigateToBankTurnover={(clientId) => {
+                setSelectedBankClientId(clientId);
+                setActiveTab('bank-turnover');
+              }}
             />
           )}
 
@@ -461,6 +550,17 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'bank-turnover' && (
+            <BankTurnover
+              clients={clients}
+              financialYears={financialYears}
+              selectedFY={selectedFY}
+              currentUser={currentUser}
+              initialClientId={selectedBankClientId}
+              onSelectFY={handleSelectFY}
+            />
+          )}
+
           {activeTab === 'reports' && (
             <Reports
               clients={clients}
@@ -469,41 +569,102 @@ export default function App() {
               selectedFY={selectedFY}
               selectedMonth={selectedMonth}
               users={users}
+              currentUser={currentUser}
               onExportCSV={handleExportMonthlyCSV}
-            />
-          )}
-
-          {activeTab === 'financial-years' && (
-            <FinancialYears
-              financialYears={financialYears}
-              selectedFY={selectedFY}
               onSelectFY={handleSelectFY}
-              onAddFY={handleAddFinancialYear}
-              monthlyWork={monthlyWork}
             />
           )}
 
+          {/* Admin Protected Tab: Financial Years */}
+          {activeTab === 'financial-years' && (
+            currentUser.role === 'admin' ? (
+              <FinancialYears
+                financialYears={financialYears}
+                selectedFY={selectedFY}
+                onSelectFY={handleSelectFY}
+                onAddFY={handleAddFinancialYear}
+                monthlyWork={monthlyWork}
+              />
+            ) : (
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
+                <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+                <h3 className="text-lg font-bold text-slate-900">403 - Access Denied</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Only administrators have permissions to modify financial year configurations.
+                </p>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Return to My Dashboard</span>
+                </button>
+              </div>
+            )
+          )}
+
+          {/* Admin Protected Tab: User & Staff Management */}
           {activeTab === 'users' && (
-            <StaffManagement
-              users={users}
-              clients={clients}
-              onAddUser={handleAddUser}
-            />
+            currentUser.role === 'admin' ? (
+              <UserManagement
+                users={users}
+                clients={clients}
+                currentUser={currentUser}
+                onAddUser={handleAddUser}
+                onUpdateUser={handleUpdateUser}
+                onToggleStatus={handleToggleUserStatus}
+                onDeleteUser={handleDeleteUser}
+                onResetPassword={handleResetUserPassword}
+              />
+            ) : (
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
+                <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+                <h3 className="text-lg font-bold text-slate-900">403 - Forbidden Access</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  User and staff account administration requires Administrator authorization.
+                </p>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Return to My Dashboard</span>
+                </button>
+              </div>
+            )
           )}
 
           {activeTab === 'activity-logs' && <ActivityLogs logs={activityLogs} />}
 
+          {/* Admin Protected Tab: Settings */}
           {activeTab === 'settings' && (
-            <SettingsModal
-              settings={settings}
-              onUpdateSettings={(newSet) => {
-                GSTStorage.saveSettings(newSet);
-                setSettings(newSet);
-                showToast('Settings saved successfully!');
-              }}
-              financialYears={financialYears}
-              onResetDatabase={handleResetDatabase}
-            />
+            currentUser.role === 'admin' ? (
+              <SettingsModal
+                settings={settings}
+                onUpdateSettings={(newSet) => {
+                  GSTStorage.saveSettings(newSet);
+                  setSettings(newSet);
+                  showToast('Settings saved successfully!');
+                }}
+                financialYears={financialYears}
+                onResetDatabase={handleResetDatabase}
+              />
+            ) : (
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
+                <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+                <h3 className="text-lg font-bold text-slate-900">403 - Forbidden</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  System settings and database restore tools are restricted to administrators.
+                </p>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Return to My Dashboard</span>
+                </button>
+              </div>
+            )
           )}
         </main>
       </div>
@@ -539,6 +700,11 @@ export default function App() {
           setMonthlyWorkSearch(gstin);
           setActiveTab('monthly-work');
         }}
+        onNavigateToBankTurnover={(clientId) => {
+          setViewingClient(null);
+          setSelectedBankClientId(clientId);
+          setActiveTab('bank-turnover');
+        }}
       />
 
       <CsvImportModal
@@ -546,11 +712,6 @@ export default function App() {
         onClose={() => setIsImportModalOpen(false)}
         existingClients={clients}
         onImportConfirmed={handleImportConfirmed}
-      />
-
-      <HostingerPackageModal
-        isOpen={isHostingerModalOpen}
-        onClose={() => setIsHostingerModalOpen(false)}
       />
     </div>
   );
