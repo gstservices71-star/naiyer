@@ -634,7 +634,15 @@ export default function App() {
             )
           )}
 
-          {activeTab === 'activity-logs' && <ActivityLogs logs={activityLogs} />}
+          {activeTab === 'activity-logs' && (
+            <ActivityLogs
+              logs={activityLogs}
+              users={users}
+              clients={clients}
+              financialYears={financialYears}
+              currentUser={currentUser}
+            />
+          )}
 
           {/* Admin Protected Tab: Settings */}
           {activeTab === 'settings' && (

@@ -93,9 +93,35 @@ export interface ActivityLog {
   user_name: string;
   user_role: UserRole;
   action: string;
+  module?: string;
+  client_id?: number | null;
+  client_name?: string | null;
+  firm_name?: string | null;
+  financial_year_id?: number | null;
+  financial_year?: string | null;
+  record_id?: string | number | null;
   description: string;
+  old_values?: Record<string, any> | null;
+  new_values?: Record<string, any> | null;
+  changed_fields?: string[] | null;
   ip_address: string;
-  created_at: string;
+  user_agent?: string;
+  session_id?: string;
+  session_status?: 'active' | 'logged_out' | 'expired';
+  created_at: string; // YYYY-MM-DD HH:mm:ss
+}
+
+export interface UserSession {
+  session_id: string;
+  user_id: number;
+  user_name: string;
+  user_role: UserRole;
+  ip_address: string;
+  user_agent: string;
+  login_time: string;
+  last_activity_time: string;
+  logout_time?: string | null;
+  status: 'active' | 'logged_out' | 'expired';
 }
 
 export interface AppSettings {

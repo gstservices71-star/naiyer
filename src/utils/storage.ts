@@ -14,6 +14,7 @@ import {
   ClientGstTurnover,
   FY_MONTHS,
   FinancialReportData,
+  UserSession,
 } from '../types';
 import {
   initialActivityLogs,
@@ -32,6 +33,38 @@ import {
 import { initialGstTurnover } from '../data/initialGstData';
 import { validateGSTIN } from './gstValidation';
 
+export function getISTTimestamp(date: Date = new Date()): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const getP = (type: string) => parts.find((p) => p.type === type)?.value || '00';
+    return `${getP('year')}-${getP('month')}-${getP('day')} ${getP('hour')}:${getP('minute')}:${getP('second')}`;
+  } catch {
+    return date.toISOString().replace('T', ' ').substring(0, 19);
+  }
+}
+
+export function sanitizeAuditValues(val: any): any {
+  if (!val || typeof val !== 'object') return val;
+  const sanitized = { ...val };
+  const sensitiveKeys = ['password', 'password_hash', 'newPassword', 'secret', 'token', 'auth_token'];
+  for (const k of Object.keys(sanitized)) {
+    if (sensitiveKeys.some((s) => k.toLowerCase().includes(s))) {
+      delete sanitized[k];
+    }
+  }
+  return sanitized;
+}
+
 const STORAGE_KEYS = {
   USERS: 'gst_app_users_v1',
   CLIENTS: 'gst_app_clients_v1',
@@ -47,6 +80,8 @@ const STORAGE_KEYS = {
   BANK_TURNOVER: 'gst_app_bank_turnover_v1',
   BANK_STATEMENTS: 'gst_app_bank_statements_v1',
   GST_TURNOVER: 'gst_app_gst_turnover_v1',
+  SESSIONS: 'gst_app_sessions_v1',
+  CURRENT_SESSION_ID: 'gst_app_current_session_id',
 };
 
 export class GSTStorage {
@@ -164,8 +199,134 @@ export class GSTStorage {
     return JSON.parse(raw);
   }
 
+  // Sessions & Online Presence
+  static getSessions(): UserSession[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+    if (!raw) return [];
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+
+  static saveSessions(sessions: UserSession[]) {
+    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+  }
+
+  static getCurrentSessionId(): string {
+    let sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    if (!sid) {
+      sid = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+      localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, sid);
+    }
+    return sid;
+  }
+
+  static startSession(user: User): UserSession {
+    const sessions = this.getSessions();
+    const sid = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+    localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, sid);
+
+    const now = getISTTimestamp();
+    const newSession: UserSession = {
+      session_id: sid,
+      user_id: user.id,
+      user_name: user.name,
+      user_role: user.role,
+      ip_address: '103.21.124.55',
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Chrome/128.0 (Windows NT 10.0; Win64)',
+      login_time: now,
+      last_activity_time: now,
+      logout_time: null,
+      status: 'active',
+    };
+
+    // Close any previous active session for this user
+    const updated = sessions.map((s) =>
+      s.user_id === user.id && s.status === 'active'
+        ? { ...s, status: 'logged_out' as const, logout_time: now }
+        : s
+    );
+    updated.unshift(newSession);
+    this.saveSessions(updated.slice(0, 200));
+    return newSession;
+  }
+
+  static endCurrentSession() {
+    const sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    const user = this.getCurrentUser();
+    if (!sid && !user) return;
+
+    const sessions = this.getSessions();
+    const now = getISTTimestamp();
+    const updated = sessions.map((s) => {
+      if ((sid && s.session_id === sid) || (user && s.user_id === user.id && s.status === 'active')) {
+        return { ...s, status: 'logged_out' as const, logout_time: now };
+      }
+      return s;
+    });
+    this.saveSessions(updated);
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+  }
+
+  static touchCurrentSession() {
+    const sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    const user = this.getCurrentUser();
+    if (!sid || !user) return;
+
+    const sessions = this.getSessions();
+    const now = getISTTimestamp();
+    let found = false;
+    const updated = sessions.map((s) => {
+      if (s.session_id === sid && s.status === 'active') {
+        found = true;
+        return { ...s, last_activity_time: now };
+      }
+      return s;
+    });
+
+    if (!found) {
+      updated.unshift({
+        session_id: sid,
+        user_id: user.id,
+        user_name: user.name,
+        user_role: user.role,
+        ip_address: '103.21.124.55',
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Chrome/128.0 (Windows NT 10.0; Win64)',
+        login_time: now,
+        last_activity_time: now,
+        logout_time: null,
+        status: 'active',
+      });
+    }
+
+    this.saveSessions(updated.slice(0, 200));
+  }
+
+  static isUserOnline(userId: number): boolean {
+    const sessions = this.getSessions();
+    const active = sessions.find((s) => s.user_id === userId && s.status === 'active');
+    if (!active) return false;
+
+    // Check if last activity was within 30 minutes
+    try {
+      const lastAct = new Date(active.last_activity_time.replace(' ', 'T')).getTime();
+      const now = new Date().getTime();
+      return now - lastAct < 30 * 60 * 1000;
+    } catch {
+      return true;
+    }
+  }
+
   static saveSettings(settings: AppSettings) {
+    const previous = this.getSettings();
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    this.logActivity('Settings Saved', 'Updated application configuration settings', {
+      module: 'Settings',
+      oldValues: sanitizeAuditValues(previous),
+      newValues: sanitizeAuditValues(settings),
+    });
   }
 
   static getCurrentUser(): User | null {
@@ -193,11 +354,30 @@ export class GSTStorage {
       (u) => u.username.toLowerCase() === input || u.email.toLowerCase() === input
     );
 
+    const ip = '103.21.124.55';
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Chrome/128.0 (Windows NT 10.0; Win64)';
+
     if (!user) {
+      // Log failed attempt with masked identifier, NEVER log password
+      this.logActivity('LOGIN_FAILED', `Failed login attempt for identifier "${identifier.slice(0, 3)}***" (User not found)`, {
+        module: 'Auth',
+        ipAddress: ip,
+        userAgent,
+        description: `Failed login attempt: Account not found for "${identifier.slice(0, 3)}***"`,
+      });
       return { success: false, error: 'Invalid Email/User ID or Password' };
     }
 
     if (user.status === 'inactive') {
+      this.logActivity('LOGIN_FAILED', `Failed login attempt for deactivated user "${user.username}"`, {
+        module: 'Auth',
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        ipAddress: ip,
+        userAgent,
+        description: `Inactive user ${user.name} (${user.username}) attempted login`,
+      });
       return { success: false, error: 'Your account is inactive. Please contact administrator.' };
     }
 
@@ -210,25 +390,55 @@ export class GSTStorage {
       (user.username === 'admin' && (password === 'admin' || password === 'Password@123'));
 
     if (!validPassword) {
+      this.logActivity('LOGIN_FAILED', `Incorrect password attempt for user "${user.username}"`, {
+        module: 'Auth',
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        ipAddress: ip,
+        userAgent,
+        description: `Invalid password supplied for user ${user.name} (${user.username})`,
+      });
       return { success: false, error: 'Invalid Email/User ID or Password' };
     }
 
     // Update last_login
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
     user.last_login = now;
     this.saveUsers(users);
     this.setCurrentUser(user);
 
-    this.logActivity('Login', `User ${user.name} (${user.role.toUpperCase()}) logged in successfully`);
+    // Start session
+    const session = this.startSession(user);
+
+    this.logActivity('LOGIN', `User ${user.name} (${user.role.toUpperCase()}) logged in successfully`, {
+      module: 'Auth',
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      ipAddress: ip,
+      userAgent,
+      sessionId: session.session_id,
+      description: `User ${user.name} logged into system (${user.role.toUpperCase()})`,
+    });
 
     return { success: true, user };
   }
 
   static logout() {
     const user = this.getCurrentUser();
+    const sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
     if (user) {
-      this.logActivity('Logout', `User ${user.name} logged out`);
+      this.logActivity('LOGOUT', `User ${user.name} logged out from the portal`, {
+        module: 'Auth',
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        sessionId: sid || undefined,
+        description: `User ${user.name} (${user.role.toUpperCase()}) initiated logout`,
+      });
     }
+    this.endCurrentSession();
     this.setCurrentUser(null);
   }
 
@@ -242,6 +452,13 @@ export class GSTStorage {
       return { success: false, error: 'This account is deactivated. Please contact the administrator.' };
     }
     const token = 'rst_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    this.logActivity('PASSWORD_RESET', `Password reset token requested for ${user.email}`, {
+      module: 'Auth',
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      description: `Reset token generated for user email ${user.email}`,
+    });
     return {
       success: true,
       resetToken: token,
@@ -261,9 +478,15 @@ export class GSTStorage {
       return { success: false, error: 'User account not found.' };
     }
     users[userIdx].password = newPassword;
-    users[userIdx].updated_at = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    users[userIdx].updated_at = getISTTimestamp();
     this.saveUsers(users);
-    this.logActivity('Password Reset', `Password reset for user ${users[userIdx].username}`);
+    this.logActivity('PASSWORD_RESET', `Password successfully updated for user ${users[userIdx].username}`, {
+      module: 'User Management',
+      userId: users[userIdx].id,
+      userName: users[userIdx].name,
+      userRole: users[userIdx].role,
+      description: `Password reset completed for account ${users[userIdx].username}`,
+    });
     return { success: true };
   }
 
@@ -289,7 +512,8 @@ export class GSTStorage {
       }
     }
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const previousUser = { ...users[index] };
+    const now = getISTTimestamp();
     users[index] = {
       ...users[index],
       name: userData.name ?? users[index].name,
@@ -303,7 +527,20 @@ export class GSTStorage {
     };
 
     this.saveUsers(users);
-    this.logActivity('User Updated', `Updated profile of ${users[index].name} (${users[index].username})`);
+
+    const oldClean = sanitizeAuditValues(previousUser);
+    const newClean = sanitizeAuditValues(users[index]);
+    const changedFields = Object.keys(userData).filter((k) => k !== 'newPassword' && (previousUser as any)[k] !== (users[index] as any)[k]);
+    if (userData.newPassword) changedFields.push('password');
+
+    this.logActivity('EDIT', `Updated user profile of ${users[index].name} (${users[index].username})`, {
+      module: 'User Management',
+      recordId: id,
+      oldValues: oldClean,
+      newValues: newClean,
+      changedFields,
+      description: `Modified profile attributes for user ${users[index].name} (${users[index].username})`,
+    });
     return { success: true };
   }
 
@@ -317,11 +554,20 @@ export class GSTStorage {
     if (current && current.id === id) {
       return { success: false, error: 'You cannot deactivate your own active logged-in account.' };
     }
-    const newStatus = users[index].status === 'active' ? 'inactive' : 'active';
+    const oldStatus = users[index].status;
+    const newStatus = oldStatus === 'active' ? 'inactive' : 'active';
     users[index].status = newStatus;
-    users[index].updated_at = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    users[index].updated_at = getISTTimestamp();
     this.saveUsers(users);
-    this.logActivity('User Status Changed', `Changed status of ${users[index].username} to ${newStatus}`);
+
+    this.logActivity('STATUS_CHANGE', `Changed status of user ${users[index].username} from ${oldStatus} to ${newStatus}`, {
+      module: 'User Management',
+      recordId: id,
+      oldValues: { status: oldStatus },
+      newValues: { status: newStatus },
+      changedFields: ['status'],
+      description: `Account status for ${users[index].name} changed to ${newStatus.toUpperCase()}`,
+    });
     return { success: true, newStatus };
   }
 
@@ -345,7 +591,12 @@ export class GSTStorage {
     );
     this.saveClients(updatedClients);
 
-    this.logActivity('User Deleted', `Deleted user account ${userToDelete.name} (${userToDelete.username})`);
+    this.logActivity('DELETE', `Deleted user account ${userToDelete.name} (${userToDelete.username})`, {
+      module: 'User Management',
+      recordId: id,
+      oldValues: sanitizeAuditValues(userToDelete),
+      description: `Deleted staff profile ${userToDelete.name} (${userToDelete.role}) and unassigned client links`,
+    });
     return { success: true };
   }
 
@@ -372,22 +623,80 @@ export class GSTStorage {
     localStorage.setItem(STORAGE_KEYS.SELECTED_MONTH, month);
   }
 
-  // Business Operations
-  static logActivity(action: string, description: string) {
+  // Central Comprehensive Activity & Audit Logger
+  static logActivity(
+    action: string,
+    description: string,
+    options?: {
+      module?: string;
+      description?: string;
+      clientId?: number | null;
+      clientName?: string | null;
+      firmName?: string | null;
+      financialYearId?: number | null;
+      financialYear?: string | null;
+      recordId?: string | number | null;
+      oldValues?: Record<string, any> | null;
+      newValues?: Record<string, any> | null;
+      changedFields?: string[] | null;
+      userId?: number;
+      userName?: string;
+      userRole?: User['role'];
+      ipAddress?: string;
+      userAgent?: string;
+      sessionId?: string;
+    }
+  ): ActivityLog {
     const currentUser = this.getCurrentUser();
     const logs = this.getActivityLogs();
+    const sid = options?.sessionId || localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID) || 'sess_default';
+
+    // Auto-detect client info if clientId provided
+    let clientName = options?.clientName || null;
+    let firmName = options?.firmName || null;
+    if (options?.clientId && (!clientName || !firmName)) {
+      const c = this.getClientById(options.clientId);
+      if (c) {
+        clientName = clientName || c.client_name;
+        firmName = firmName || c.firm_name;
+      }
+    }
+
+    // Auto-detect FY display name if financialYearId provided
+    let fyDisplay = options?.financialYear || null;
+    if (options?.financialYearId && !fyDisplay) {
+      const fy = this.getFinancialYears().find((f) => f.id === options.financialYearId);
+      if (fy) fyDisplay = fy.display_name;
+    }
+
     const newLog: ActivityLog = {
-      id: Date.now(),
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      user_role: currentUser.role,
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      user_id: options?.userId || currentUser?.id || 1,
+      user_name: options?.userName || currentUser?.name || 'System Admin',
+      user_role: options?.userRole || currentUser?.role || 'admin',
       action,
-      description,
-      ip_address: '103.21.124.55',
-      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      module: options?.module || 'General',
+      client_id: options?.clientId || null,
+      client_name: clientName,
+      firm_name: firmName,
+      financial_year_id: options?.financialYearId || null,
+      financial_year: fyDisplay,
+      record_id: options?.recordId || null,
+      description: options?.description || description,
+      old_values: sanitizeAuditValues(options?.oldValues) || null,
+      new_values: sanitizeAuditValues(options?.newValues) || null,
+      changed_fields: options?.changedFields || null,
+      ip_address: options?.ipAddress || '103.21.124.55',
+      user_agent: options?.userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : 'Chrome/128.0 (Windows NT 10.0; Win64)'),
+      session_id: sid,
+      session_status: 'active',
+      created_at: getISTTimestamp(),
     };
+
     logs.unshift(newLog);
-    this.saveActivityLogs(logs.slice(0, 500));
+    this.saveActivityLogs(logs.slice(0, 1000));
+    this.touchCurrentSession();
+    return newLog;
   }
 
   static addClient(clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>): { success: boolean; error?: string; client?: Client } {
@@ -404,7 +713,7 @@ export class GSTStorage {
       return { success: false, error: validation.error };
     }
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
     const newId = clients.length > 0 ? Math.max(...clients.map((c) => c.id)) + 1 : 101;
     const newClient: Client = {
       ...clientData,
@@ -416,7 +725,17 @@ export class GSTStorage {
 
     clients.unshift(newClient);
     this.saveClients(clients);
-    this.logActivity('Client Created', `Created client ${newClient.firm_name} (${newClient.gstin})`);
+
+    this.logActivity('CREATE', `Added new client: ${newClient.firm_name} (${newClient.gstin})`, {
+      module: 'Client',
+      clientId: newClient.id,
+      clientName: newClient.client_name,
+      firmName: newClient.firm_name,
+      recordId: newClient.id,
+      newValues: sanitizeAuditValues(newClient),
+      description: `Created new master client ${newClient.firm_name} with GSTIN ${newClient.gstin} and GST type ${newClient.gst_type}`,
+    });
+
     return { success: true, client: newClient };
   }
 
@@ -433,7 +752,8 @@ export class GSTStorage {
       clientData.gstin = gstin;
     }
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const previousClient = { ...clients[index] };
+    const now = getISTTimestamp();
     clients[index] = {
       ...clients[index],
       ...clientData,
@@ -441,7 +761,34 @@ export class GSTStorage {
     };
 
     this.saveClients(clients);
-    this.logActivity('Client Updated', `Updated details for ${clients[index].firm_name}`);
+
+    // Compute changed fields diff
+    const changedFields: string[] = [];
+    const oldValues: Record<string, any> = {};
+    const newValues: Record<string, any> = {};
+
+    Object.keys(clientData).forEach((key) => {
+      const prevVal = (previousClient as any)[key];
+      const nextVal = (clients[index] as any)[key];
+      if (prevVal !== nextVal) {
+        changedFields.push(key);
+        oldValues[key] = prevVal;
+        newValues[key] = nextVal;
+      }
+    });
+
+    this.logActivity('EDIT', `Updated client details for ${clients[index].firm_name} (${clients[index].gstin})`, {
+      module: 'Client',
+      clientId: id,
+      clientName: clients[index].client_name,
+      firmName: clients[index].firm_name,
+      recordId: id,
+      oldValues: sanitizeAuditValues(oldValues),
+      newValues: sanitizeAuditValues(newValues),
+      changedFields,
+      description: `Updated master client ${clients[index].firm_name}. Changed: ${changedFields.join(', ') || 'attributes'}`,
+    });
+
     return { success: true };
   }
 
@@ -457,7 +804,16 @@ export class GSTStorage {
     const monthly = this.getMonthlyWork().filter((m) => m.client_id !== id);
     this.saveMonthlyWork(monthly);
 
-    this.logActivity('Client Deleted', `Deleted client ${client.firm_name} (${client.gstin})`);
+    this.logActivity('DELETE', `Deleted client ${client.firm_name} (${client.gstin})`, {
+      module: 'Client',
+      clientId: id,
+      clientName: client.client_name,
+      firmName: client.firm_name,
+      recordId: id,
+      oldValues: sanitizeAuditValues(client),
+      description: `Permanently removed client ${client.firm_name} (GSTIN: ${client.gstin}) from the system`,
+    });
+
     return { success: true };
   }
 
@@ -468,7 +824,7 @@ export class GSTStorage {
     newStatus: WorkStatus,
     remark: string
   ): { success: boolean; updatedWork?: MonthlyWork } {
-    const currentUser = this.getCurrentUser();
+    const currentUser = this.getCurrentUser() || initialUsers[0];
     const monthlyList = this.getMonthlyWork();
     const clients = this.getClients();
     const client = clients.find((c) => c.id === clientId);
@@ -479,8 +835,9 @@ export class GSTStorage {
       (m) => m.financial_year_id === fyId && m.month === month && m.client_id === clientId
     );
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
     const previousStatus: WorkStatus = index !== -1 ? monthlyList[index].status : 'Not Started';
+    const previousRemark = index !== -1 ? monthlyList[index].remark || '' : '';
 
     let updatedWork: MonthlyWork;
 
@@ -512,7 +869,7 @@ export class GSTStorage {
     this.saveMonthlyWork(monthlyList);
 
     // Audit trail logging
-    if (previousStatus !== newStatus || remark) {
+    if (previousStatus !== newStatus || remark !== previousRemark) {
       const historyList = this.getWorkHistory();
       const newHistory: WorkHistory = {
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -534,8 +891,21 @@ export class GSTStorage {
     }
 
     this.logActivity(
-      'Status Updated',
-      `Updated ${month} work for ${client?.firm_name || 'Client #' + clientId} to "${newStatus}"`
+      'STATUS_CHANGE',
+      `Updated ${month} (${fy?.display_name || 'FY'}) status for ${client?.firm_name || 'Client #' + clientId} from "${previousStatus}" to "${newStatus}"`,
+      {
+        module: 'Monthly Work',
+        clientId,
+        clientName: client?.client_name,
+        firmName: client?.firm_name,
+        financialYearId: fyId,
+        financialYear: fy?.display_name,
+        recordId: updatedWork.id,
+        oldValues: { status: previousStatus, remark: previousRemark },
+        newValues: { status: newStatus, remark },
+        changedFields: ['status', ...(remark !== previousRemark ? ['remark'] : [])],
+        description: `Set ${month} work status to ${newStatus}${remark ? ` (Remark: ${remark})` : ''}`,
+      }
     );
 
     return { success: true, updatedWork };
@@ -562,7 +932,15 @@ export class GSTStorage {
 
     fys.push(newFy);
     this.saveFinancialYears(fys);
-    this.logActivity('Financial Year Created', `Created Financial Year ${displayName}`);
+
+    this.logActivity('CREATE', `Created Financial Year ${displayName}`, {
+      module: 'Financial Year',
+      financialYear: displayName,
+      recordId: newFy.id,
+      newValues: sanitizeAuditValues(newFy),
+      description: `Created new Financial Year ${displayName} (Period: ${newFy.start_date} to ${newFy.end_date})`,
+    });
+
     return { success: true, fy: newFy };
   }
 
@@ -575,7 +953,7 @@ export class GSTStorage {
       return { success: false, error: 'Email is already registered.' };
     }
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
     const newUser: User = {
       ...userData,
       id: Date.now(),
@@ -584,12 +962,19 @@ export class GSTStorage {
     };
     users.push(newUser);
     this.saveUsers(users);
-    this.logActivity('User Created', `Created ${userData.role} user: ${userData.name}`);
+
+    this.logActivity('CREATE', `Created ${userData.role.toUpperCase()} user: ${userData.name} (${userData.username})`, {
+      module: 'User Management',
+      recordId: newUser.id,
+      newValues: sanitizeAuditValues(newUser),
+      description: `Created new ${userData.role} staff account for ${userData.name} (Email: ${userData.email})`,
+    });
+
     return { success: true };
   }
 
   // ==========================================
-  // BANK ACCOUNTS & TURNOVER (NEW FEATURE)
+  // BANK ACCOUNTS & TURNOVER
   // ==========================================
   static getBankAccounts(): ClientBankAccount[] {
     const raw = localStorage.getItem(STORAGE_KEYS.BANK_ACCOUNTS);
@@ -623,9 +1008,11 @@ export class GSTStorage {
     const existingIndex = all.findIndex(
       (a) => a.client_id === accountData.client_id && a.slot_number === accountData.slot_number
     );
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
 
     let savedAccount: ClientBankAccount;
+    let isEdit = existingIndex >= 0;
+    const previousAccount = isEdit ? { ...all[existingIndex] } : null;
 
     if (existingIndex >= 0) {
       savedAccount = {
@@ -646,10 +1033,22 @@ export class GSTStorage {
 
     this.saveBankAccounts(all);
     const client = this.getClientById(accountData.client_id);
+
     this.logActivity(
-      'Bank Account Saved',
-      `Updated Bank Slot #${accountData.slot_number} (${accountData.bank_name}) for ${client?.firm_name || 'Client #' + accountData.client_id}`
+      isEdit ? 'EDIT' : 'CREATE',
+      `${isEdit ? 'Updated' : 'Added'} Bank Slot #${accountData.slot_number} (${accountData.bank_name}) for ${client?.firm_name || 'Client #' + accountData.client_id}`,
+      {
+        module: 'Bank Turnover',
+        clientId: accountData.client_id,
+        clientName: client?.client_name,
+        firmName: client?.firm_name,
+        recordId: savedAccount.id,
+        oldValues: previousAccount ? sanitizeAuditValues(previousAccount) : null,
+        newValues: sanitizeAuditValues(savedAccount),
+        description: `${isEdit ? 'Updated' : 'Configured'} Bank Account #${accountData.slot_number}: ${accountData.bank_name} (A/C: ${accountData.account_number})`,
+      }
     );
+
     return savedAccount;
   }
 
@@ -669,8 +1068,17 @@ export class GSTStorage {
 
       const client = this.getClientById(target.client_id);
       this.logActivity(
-        'Bank Account Removed',
-        `Removed Bank Slot #${target.slot_number} (${target.bank_name}) for ${client?.firm_name || 'Client #' + target.client_id}`
+        'DELETE',
+        `Removed Bank Slot #${target.slot_number} (${target.bank_name}) for ${client?.firm_name || 'Client #' + target.client_id}`,
+        {
+          module: 'Bank Turnover',
+          clientId: target.client_id,
+          clientName: client?.client_name,
+          firmName: client?.firm_name,
+          recordId: target.id,
+          oldValues: sanitizeAuditValues(target),
+          description: `Deleted Bank Account Slot #${target.slot_number} (${target.bank_name} - ${target.account_number}) and its associated records`,
+        }
       );
     }
   }
@@ -700,16 +1108,32 @@ export class GSTStorage {
     monthlyAmounts: Record<string, number>
   ): void {
     const all = this.getBankTurnover();
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
+
+    // Fetch old records to calculate diff
+    const oldRecords = all.filter(
+      (t) => t.client_id === clientId && t.bank_account_id === bankAccountId && t.financial_year_id === fyId
+    );
+    const oldValues: Record<string, number> = {};
+    oldRecords.forEach((r) => {
+      oldValues[r.month] = r.turnover_amount;
+    });
 
     // Remove existing turnover for this client + bank_account + FY to prevent duplicates
     const filtered = all.filter(
       (t) => !(t.client_id === clientId && t.bank_account_id === bankAccountId && t.financial_year_id === fyId)
     );
 
+    const newValues: Record<string, number> = {};
+    const changedMonths: string[] = [];
+
     // Insert new valid rows
     Object.entries(monthlyAmounts).forEach(([month, amount]) => {
       const numAmount = Number(amount) || 0;
+      newValues[month] = numAmount;
+      if ((oldValues[month] ?? 0) !== numAmount) {
+        changedMonths.push(month);
+      }
       filtered.push({
         id: Date.now() + Math.floor(Math.random() * 100000),
         client_id: clientId,
@@ -723,6 +1147,29 @@ export class GSTStorage {
     });
 
     this.saveBankTurnover(filtered);
+
+    const client = this.getClientById(clientId);
+    const accounts = this.getBankAccounts();
+    const bankAccount = accounts.find((a) => a.id === bankAccountId);
+    const fy = this.getFinancialYears().find((f) => f.id === fyId);
+
+    this.logActivity(
+      'SAVE',
+      `Saved Bank Turnover for Slot #${bankAccount?.slot_number || '1'} (${bankAccount?.bank_name || 'Bank'}) for ${client?.firm_name || 'Client #' + clientId} (${fy?.display_name || ''})`,
+      {
+        module: 'Bank Turnover',
+        clientId,
+        clientName: client?.client_name,
+        firmName: client?.firm_name,
+        financialYearId: fyId,
+        financialYear: fy?.display_name,
+        recordId: bankAccountId,
+        oldValues,
+        newValues,
+        changedFields: changedMonths,
+        description: `Updated 12-month Bank Turnover figures for ${bankAccount?.bank_name} (${changedMonths.length} months modified)`,
+      }
+    );
   }
 
   static getBankStatementBackups(): BankStatementBackup[] {
@@ -753,13 +1200,20 @@ export class GSTStorage {
   }): BankStatementBackup {
     const all = this.getBankStatementBackups();
     const currentUser = this.getCurrentUser() || initialUsers[0];
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
 
     // Random safe stored filename
     const randomHex = Math.random().toString(36).substring(2, 10);
     const storedFileName = `stmt_${backupData.client_id}_${backupData.bank_account_id}_${backupData.financial_year_id}_${randomHex}.zip`;
 
     // Filter out previous backup for this slot & FY if replacing
+    const existing = all.find(
+      (b) =>
+        b.client_id === backupData.client_id &&
+        b.bank_account_id === backupData.bank_account_id &&
+        b.financial_year_id === backupData.financial_year_id
+    );
+
     const filtered = all.filter(
       (b) =>
         !(
@@ -787,9 +1241,24 @@ export class GSTStorage {
     this.saveBankStatementBackups(filtered);
 
     const client = this.getClientById(backupData.client_id);
+    const bankAccount = this.getBankAccounts().find((a) => a.id === backupData.bank_account_id);
+    const fy = this.getFinancialYears().find((f) => f.id === backupData.financial_year_id);
+
     this.logActivity(
-      'Statement Backup Uploaded',
-      `Uploaded ZIP Statement (${backupData.file_name}) for ${client?.firm_name || 'Client #' + backupData.client_id}`
+      'UPLOAD',
+      `Uploaded ZIP Statement Backup (${backupData.file_name}, ${(backupData.file_size / 1024).toFixed(1)} KB) for ${client?.firm_name || 'Client #' + backupData.client_id}`,
+      {
+        module: 'Bank Statement',
+        clientId: backupData.client_id,
+        clientName: client?.client_name,
+        firmName: client?.firm_name,
+        financialYearId: backupData.financial_year_id,
+        financialYear: fy?.display_name,
+        recordId: newBackup.id,
+        oldValues: existing ? { file_name: existing.file_name, file_size: existing.file_size } : null,
+        newValues: { file_name: backupData.file_name, file_size: backupData.file_size },
+        description: `Uploaded 12-month ZIP statement for Slot #${bankAccount?.slot_number || '1'} (${bankAccount?.bank_name}) - File: ${backupData.file_name}`,
+      }
     );
 
     return newBackup;
@@ -803,9 +1272,21 @@ export class GSTStorage {
 
     if (target) {
       const client = this.getClientById(target.client_id);
+      const fy = this.getFinancialYears().find((f) => f.id === target.financial_year_id);
       this.logActivity(
-        'Statement Backup Deleted',
-        `Deleted statement backup (${target.file_name}) for ${client?.firm_name || 'Client #' + target.client_id}`
+        'DELETE',
+        `Deleted Statement Backup (${target.file_name}) for ${client?.firm_name || 'Client #' + target.client_id}`,
+        {
+          module: 'Bank Statement',
+          clientId: target.client_id,
+          clientName: client?.client_name,
+          firmName: client?.firm_name,
+          financialYearId: target.financial_year_id,
+          financialYear: fy?.display_name,
+          recordId: target.id,
+          oldValues: { file_name: target.file_name, file_size: target.file_size },
+          description: `Removed ZIP statement backup file ${target.file_name}`,
+        }
       );
     }
   }
@@ -864,16 +1345,43 @@ export class GSTStorage {
     monthlyData: Record<string, { taxable: number; exempt: number }>
   ): void {
     const all = this.getGstTurnover();
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = getISTTimestamp();
+
+    // Fetch existing records to compute diff
+    const oldRecords = all.filter(
+      (g) => g.client_id === clientId && g.financial_year_id === fyId
+    );
+    const oldValues: Record<string, any> = {};
+    oldRecords.forEach((r) => {
+      oldValues[`${r.month}_taxable`] = r.taxable_turnover;
+      oldValues[`${r.month}_exempt`] = r.exempt_turnover;
+      oldValues[`${r.month}_total`] = r.total_gst_turnover;
+    });
 
     // Remove existing turnover for this client + FY
     const filtered = all.filter(
       (g) => !(g.client_id === clientId && g.financial_year_id === fyId)
     );
 
+    const newValues: Record<string, any> = {};
+    const changedMonths: string[] = [];
+
     Object.entries(monthlyData).forEach(([month, data]) => {
       const taxable = Number(data.taxable) || 0;
       const exempt = Number(data.exempt) || 0;
+      const total = taxable + exempt;
+
+      newValues[`${month}_taxable`] = taxable;
+      newValues[`${month}_exempt`] = exempt;
+      newValues[`${month}_total`] = total;
+
+      if (
+        (oldValues[`${month}_taxable`] ?? 0) !== taxable ||
+        (oldValues[`${month}_exempt`] ?? 0) !== exempt
+      ) {
+        changedMonths.push(month);
+      }
+
       filtered.push({
         id: Date.now() + Math.floor(Math.random() * 100000),
         client_id: clientId,
@@ -881,7 +1389,7 @@ export class GSTStorage {
         month,
         taxable_turnover: taxable,
         exempt_turnover: exempt,
-        total_gst_turnover: taxable + exempt,
+        total_gst_turnover: total,
         created_at: now,
         updated_at: now,
       });
@@ -889,9 +1397,23 @@ export class GSTStorage {
 
     this.saveGstTurnover(filtered);
     const client = this.getClientById(clientId);
+    const fy = this.getFinancialYears().find((f) => f.id === fyId);
+
     this.logActivity(
-      'GST Turnover Updated',
-      `Saved 12-month GST turnover figures for ${client?.firm_name || 'Client #' + clientId}`
+      'SAVE',
+      `Saved GST Turnover figures for ${client?.firm_name || 'Client #' + clientId} (${fy?.display_name || ''})`,
+      {
+        module: 'GST Turnover',
+        clientId,
+        clientName: client?.client_name,
+        firmName: client?.firm_name,
+        financialYearId: fyId,
+        financialYear: fy?.display_name,
+        oldValues,
+        newValues,
+        changedFields: changedMonths,
+        description: `Saved 12-month GST turnover (Taxable + Exempt) for ${client?.firm_name} (${changedMonths.length} months modified)`,
+      }
     );
   }
 

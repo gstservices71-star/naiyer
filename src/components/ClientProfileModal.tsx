@@ -782,39 +782,103 @@ export const ClientProfileModal: React.FC<ClientProfileModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: Audit History */}
+          {/* TAB 3: Activity & Audit History */}
           {activeTab === 'audit' && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <History className="w-4 h-4 text-slate-600" />
-                <h4 className="font-bold text-slate-900 text-sm">Status Audit Trail</h4>
-              </div>
+            <div className="space-y-5">
+              {/* Comprehensive Staff Activity Logs for this Client */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-blue-600" />
+                    <h4 className="font-bold text-slate-900 text-sm">Client Activity & Modification Logs</h4>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                    24/7 Immutable Audit Trail
+                  </span>
+                </div>
 
-              {clientHistory.length === 0 ? (
-                <p className="text-slate-400 italic text-xs">No status change history recorded yet.</p>
-              ) : (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {clientHistory.slice(0, 10).map((h) => (
-                    <div
-                      key={h.id}
-                      className="p-2 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-bold text-slate-800">
-                          {h.fy_name} - {h.month}:
-                        </span>{' '}
-                        <span className="text-slate-500">{h.previous_status}</span>
-                        <span className="mx-1 text-slate-400">→</span>
-                        <span className="font-bold text-slate-900">{h.new_status}</span>
-                        {h.remark && <span className="text-slate-600 ml-2">"{h.remark}"</span>}
+                {(() => {
+                  const clientLogs = GSTStorage.getActivityLogs().filter(
+                    (l) => l.client_id === client.id || (l.firm_name && l.firm_name === client.firm_name)
+                  );
+
+                  if (clientLogs.length === 0) {
+                    return (
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-400 text-xs italic">
+                        No client-specific staff activity logged yet.
                       </div>
-                      <div className="text-[10px] text-slate-400">
-                        {h.changed_at} by {h.changed_by_name}
+                    );
+                  }
+
+                  return (
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-100">
+                        {clientLogs.map((log) => (
+                          <div key={log.id} className="p-3 bg-white hover:bg-slate-50/80 transition-colors text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900 bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.2 rounded text-[10px]">
+                                  {log.action}
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                                  {log.module}
+                                </span>
+                                <span className="font-bold text-slate-800 text-xs">{log.user_name}</span>
+                                <span className="text-[10px] text-slate-400 uppercase">({log.user_role})</span>
+                              </div>
+                              <p className="text-slate-700 text-xs">{log.description}</p>
+                              {log.changed_fields && log.changed_fields.length > 0 && (
+                                <div className="text-[10px] text-amber-800 font-mono">
+                                  Modified: {log.changed_fields.join(', ')}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-right whitespace-nowrap text-[10px] text-slate-400 font-mono">
+                              <div>{log.created_at}</div>
+                              <div>IP: {log.ip_address}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  );
+                })()}
+              </div>
+
+              {/* Status Audit Trail */}
+              <div className="space-y-2 pt-3 border-t border-slate-200">
+                <div className="flex items-center gap-2">
+                  <CalendarCheck className="w-4 h-4 text-slate-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Monthly GST Status History</h4>
                 </div>
-              )}
+
+                {clientHistory.length === 0 ? (
+                  <p className="text-slate-400 italic text-xs">No status change history recorded yet.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {clientHistory.slice(0, 15).map((h) => (
+                      <div
+                        key={h.id}
+                        className="p-2 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-800">
+                            {h.fy_name} - {h.month}:
+                          </span>{' '}
+                          <span className="text-slate-500">{h.previous_status}</span>
+                          <span className="mx-1 text-slate-400">→</span>
+                          <span className="font-bold text-slate-900">{h.new_status}</span>
+                          {h.remark && <span className="text-slate-600 ml-2">"{h.remark}"</span>}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {h.changed_at} by {h.changed_by_name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -15,6 +15,7 @@ import {
   X,
   LogOut,
   Landmark,
+  ShieldCheck,
 } from 'lucide-react';
 
 export type TabType =
@@ -66,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'financial-years' as TabType, label: 'Financial Years', icon: CalendarDays },
     { id: 'import' as TabType, label: 'Import Clients (CSV)', icon: FileUp },
     { id: 'export' as TabType, label: 'Export Data', icon: FileDown },
-    { id: 'activity-logs' as TabType, label: 'Activity Logs', icon: History },
+    { id: 'activity-logs' as TabType, label: 'Staff Activity / Audit Log', icon: ShieldCheck, badge: 'Audit', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
   ];
 
   return (
