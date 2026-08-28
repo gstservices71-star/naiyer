@@ -1,0 +1,6 @@
+{
+  "name": "GST Client Work Management Admin Panel",
+  "description": "A comprehensive web-based GST client management and monthly GST work tracking admin panel with financial year isolation, staff assignments, status tracking, and export/import tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

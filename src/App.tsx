@@ -1,0 +1,557 @@
+import React, { useState, useEffect } from 'react';
+import {
+  ActivityLog,
+  AppSettings,
+  Client,
+  FinancialYear,
+  MonthlyWork as MonthlyWorkType,
+  User,
+  WorkHistory,
+  WorkStatus,
+} from './types';
+import { GSTStorage } from './utils/storage';
+import { Navbar } from './components/Navbar';
+import { Sidebar, TabType } from './components/Sidebar';
+import { Dashboard } from './components/Dashboard';
+import { ClientsList } from './components/ClientsList';
+import { MonthlyWork } from './components/MonthlyWork';
+import { FinancialYears } from './components/FinancialYears';
+import { StaffManagement } from './components/StaffManagement';
+import { Reports } from './components/Reports';
+import { ActivityLogs } from './components/ActivityLogs';
+import { SettingsModal } from './components/SettingsModal';
+import { ClientFormModal } from './components/ClientFormModal';
+import { ClientProfileModal } from './components/ClientProfileModal';
+import { CsvImportModal } from './components/CsvImportModal';
+import { HostingerPackageModal } from './components/HostingerPackageModal';
+import { AnimatePresence, motion } from 'motion/react';
+import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
+
+export default function App() {
+  // Global State
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
+  const [selectedFY, setSelectedFY] = useState<FinancialYear | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>('August');
+  const [monthlyWork, setMonthlyWork] = useState<MonthlyWorkType[]>([]);
+  const [workHistory, setWorkHistory] = useState<WorkHistory[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+
+  // UI State
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Modals
+  const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [viewingClient, setViewingClient] = useState<Client | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isHostingerModalOpen, setIsHostingerModalOpen] = useState(false);
+
+  // Routing query filter to monthly work
+  const [monthlyWorkSearch, setMonthlyWorkSearch] = useState('');
+  const [monthlyWorkStatusFilter, setMonthlyWorkStatusFilter] = useState('all');
+
+  // Toasts
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // Initial Load from local persistence
+  useEffect(() => {
+    const loadedUsers = GSTStorage.getUsers();
+    const loadedClients = GSTStorage.getClients();
+    const loadedFYs = GSTStorage.getFinancialYears();
+    const loadedMonthlyWork = GSTStorage.getMonthlyWork();
+    const loadedHistory = GSTStorage.getWorkHistory();
+    const loadedLogs = GSTStorage.getActivityLogs();
+    const loadedSettings = GSTStorage.getSettings();
+    const loadedCurUser = GSTStorage.getCurrentUser();
+    const loadedFY = GSTStorage.getSelectedFY();
+    const loadedMonth = GSTStorage.getSelectedMonth();
+
+    setUsers(loadedUsers);
+    setClients(loadedClients);
+    setFinancialYears(loadedFYs);
+    setSelectedFY(loadedFY);
+    setSelectedMonth(loadedMonth);
+    setMonthlyWork(loadedMonthlyWork);
+    setWorkHistory(loadedHistory);
+    setActivityLogs(loadedLogs);
+    setSettings(loadedSettings);
+    setCurrentUser(loadedCurUser);
+  }, []);
+
+  if (!currentUser || !selectedFY || !settings) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center font-sans">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="text-sm font-semibold text-slate-300">
+            Initializing GST Portal Database Engine...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Handlers
+  const handleSelectFY = (fy: FinancialYear) => {
+    setSelectedFY(fy);
+    GSTStorage.setSelectedFY(fy);
+    showToast(`Switched to Financial Year ${fy.display_name}`, 'info');
+  };
+
+  const handleSelectMonth = (month: string) => {
+    setSelectedMonth(month);
+    GSTStorage.setSelectedMonth(month);
+  };
+
+  const handleSwitchUser = (user: User) => {
+    setCurrentUser(user);
+    GSTStorage.setCurrentUser(user);
+    showToast(`Switched active user to ${user.name} (${user.role.toUpperCase()})`, 'info');
+  };
+
+  const handleSaveClient = (
+    clientData: Omit<Client, 'id' | 'created_at' | 'updated_at'>
+  ): { success: boolean; error?: string } => {
+    if (editingClient) {
+      const res = GSTStorage.updateClient(editingClient.id, clientData);
+      if (res.success) {
+        setClients(GSTStorage.getClients());
+        setActivityLogs(GSTStorage.getActivityLogs());
+        showToast(`Client "${clientData.firm_name}" updated successfully!`);
+      }
+      return res;
+    } else {
+      const res = GSTStorage.addClient(clientData);
+      if (res.success && res.client) {
+        setClients(GSTStorage.getClients());
+        setActivityLogs(GSTStorage.getActivityLogs());
+        showToast(`Client "${clientData.firm_name}" registered with GSTIN ${clientData.gstin}!`);
+      }
+      return res;
+    }
+  };
+
+  const handleDeleteClient = (client: Client) => {
+    if (
+      window.confirm(
+        `Are you sure you want to permanently delete "${client.firm_name}" (${client.gstin}) and all related monthly records?`
+      )
+    ) {
+      const res = GSTStorage.deleteClient(client.id);
+      if (res.success) {
+        setClients(GSTStorage.getClients());
+        setMonthlyWork(GSTStorage.getMonthlyWork());
+        setActivityLogs(GSTStorage.getActivityLogs());
+        showToast(`Client "${client.firm_name}" deleted.`);
+      }
+    }
+  };
+
+  const handleUpdateStatus = (
+    fyId: number,
+    month: string,
+    clientId: number,
+    status: WorkStatus,
+    remark: string
+  ) => {
+    const res = GSTStorage.updateMonthlyStatus(fyId, month, clientId, status, remark);
+    if (res.success) {
+      setMonthlyWork(GSTStorage.getMonthlyWork());
+      setWorkHistory(GSTStorage.getWorkHistory());
+      setActivityLogs(GSTStorage.getActivityLogs());
+    }
+  };
+
+  const handleAddFinancialYear = (startYear: number) => {
+    const res = GSTStorage.addFinancialYear(startYear);
+    if (res.success && res.fy) {
+      setFinancialYears(GSTStorage.getFinancialYears());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast(`Financial Year ${res.fy.display_name} created!`);
+    }
+    return res;
+  };
+
+  const handleAddUser = (userData: Omit<User, 'id' | 'created_at' | 'updated_at'>) => {
+    const res = GSTStorage.addUser(userData);
+    if (res.success) {
+      setUsers(GSTStorage.getUsers());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast(`User account for ${userData.name} created!`);
+    }
+    return res;
+  };
+
+  const handleImportConfirmed = (
+    newClients: Omit<Client, 'id' | 'created_at' | 'updated_at'>[]
+  ) => {
+    let imported = 0;
+    for (const c of newClients) {
+      const res = GSTStorage.addClient(c);
+      if (res.success) imported++;
+    }
+    setClients(GSTStorage.getClients());
+    setActivityLogs(GSTStorage.getActivityLogs());
+    showToast(`Successfully imported ${imported} clients from CSV!`);
+  };
+
+  const handleExportClientsCSV = () => {
+    const header = [
+      'Client ID',
+      'GSTIN',
+      'Firm Name',
+      'Client Name',
+      'Mobile',
+      'Email',
+      'Address',
+      'City',
+      'State',
+      'PIN',
+      'GST Scheme',
+      'Status',
+    ];
+    const rows = clients.map((c) => [
+      c.id,
+      `"${c.gstin}"`,
+      `"${c.firm_name.replace(/"/g, '""')}"`,
+      `"${c.client_name.replace(/"/g, '""')}"`,
+      `"${c.mobile}"`,
+      `"${c.email || ''}"`,
+      `"${(c.address || '').replace(/"/g, '""')}"`,
+      `"${c.city || ''}"`,
+      `"${c.state || ''}"`,
+      `"${c.pin_code || ''}"`,
+      c.gst_type,
+      c.status,
+    ]);
+
+    const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `gst_master_clients_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Exported Master Clients CSV', 'info');
+  };
+
+  const handleExportMonthlyCSV = () => {
+    const workMap = new Map<number, MonthlyWorkType>();
+    monthlyWork
+      .filter((m) => m.financial_year_id === selectedFY.id && m.month === selectedMonth)
+      .forEach((r) => workMap.set(r.client_id, r));
+
+    const header = [
+      'GSTIN',
+      'Firm Name',
+      'Client Name',
+      'Scheme',
+      'Staff',
+      'Status',
+      'Remark',
+      'Last Updated',
+    ];
+    const rows = clients
+      .filter((c) => c.status === 'active')
+      .map((c) => {
+        const rec = workMap.get(c.id);
+        const staff = users.find((u) => u.id === c.assigned_staff_id);
+        return [
+          `"${c.gstin}"`,
+          `"${c.firm_name.replace(/"/g, '""')}"`,
+          `"${c.client_name.replace(/"/g, '""')}"`,
+          c.gst_type,
+          `"${staff ? staff.name : 'Unassigned'}"`,
+          rec ? rec.status : 'Not Started',
+          `"${(rec?.remark || '').replace(/"/g, '""')}"`,
+          rec?.updated_at || '',
+        ];
+      });
+
+    const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `gst_work_${selectedMonth}_${selectedFY.display_name}_${new Date().toISOString().split('T')[0]}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Exported ${selectedMonth} Monthly Work CSV`, 'info');
+  };
+
+  const handleResetDatabase = () => {
+    GSTStorage.resetToDefaultSeed();
+    setUsers(GSTStorage.getUsers());
+    setClients(GSTStorage.getClients());
+    setFinancialYears(GSTStorage.getFinancialYears());
+    setSelectedFY(GSTStorage.getSelectedFY());
+    setSelectedMonth(GSTStorage.getSelectedMonth());
+    setMonthlyWork(GSTStorage.getMonthlyWork());
+    setWorkHistory(GSTStorage.getWorkHistory());
+    setActivityLogs(GSTStorage.getActivityLogs());
+    setSettings(GSTStorage.getSettings());
+    setCurrentUser(GSTStorage.getCurrentUser());
+    showToast('Database successfully restored to clean seed data.');
+  };
+
+  // Pending count for sidebar badge
+  const pendingCount = clients
+    .filter((c) => c.status === 'active')
+    .filter((c) => {
+      const rec = monthlyWork.find(
+        (m) =>
+          m.financial_year_id === selectedFY.id &&
+          m.month === selectedMonth &&
+          m.client_id === c.id
+      );
+      const st = rec ? rec.status : 'Not Started';
+      return st !== 'Completed';
+    }).length;
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-2.5 text-xs font-bold ${
+              toast.type === 'success'
+                ? 'bg-emerald-900 text-white border-emerald-700'
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-700'
+                : 'bg-blue-900 text-white border-blue-700'
+            }`}
+          >
+            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400" />}
+            {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400" />}
+            <span>{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Top Navbar */}
+      <Navbar
+        currentUser={currentUser}
+        onSwitchUser={handleSwitchUser}
+        users={users}
+        financialYears={financialYears}
+        selectedFY={selectedFY}
+        onSelectFY={handleSelectFY}
+        selectedMonth={selectedMonth}
+        onSelectMonth={handleSelectMonth}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onOpenHostingerModal={() => setIsHostingerModalOpen(true)}
+        companyName={settings.company_name}
+      />
+
+      {/* App Body */}
+      <div className="flex-1 flex max-w-7xl w-full mx-auto">
+        {/* Sidebar */}
+        <Sidebar
+          activeTab={activeTab}
+          onSelectTab={(tab) => {
+            if (tab === 'import') {
+              setIsImportModalOpen(true);
+            } else if (tab === 'export') {
+              handleExportClientsCSV();
+            } else if (tab === 'hostinger-package') {
+              setIsHostingerModalOpen(true);
+            } else {
+              setActiveTab(tab);
+            }
+          }}
+          currentUser={currentUser}
+          clientCount={clients.length}
+          pendingCount={pendingCount}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+        />
+
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 md:p-6 overflow-y-auto max-w-full">
+          {activeTab === 'dashboard' && (
+            <Dashboard
+              clients={clients}
+              monthlyWork={monthlyWork}
+              financialYears={financialYears}
+              selectedFY={selectedFY}
+              selectedMonth={selectedMonth}
+              users={users}
+              activityLogs={activityLogs}
+              onNavigateTab={(tab, filterStatus) => {
+                if (filterStatus) {
+                  setMonthlyWorkStatusFilter(filterStatus);
+                } else {
+                  setMonthlyWorkStatusFilter('all');
+                }
+                setMonthlyWorkSearch('');
+                setActiveTab(tab);
+              }}
+              onOpenAddClient={() => {
+                setEditingClient(null);
+                setIsAddClientModalOpen(true);
+              }}
+              onOpenImportModal={() => setIsImportModalOpen(true)}
+            />
+          )}
+
+          {activeTab === 'clients' && (
+            <ClientsList
+              clients={clients}
+              users={users}
+              currentUser={currentUser}
+              selectedFY={selectedFY}
+              selectedMonth={selectedMonth}
+              monthlyWork={monthlyWork}
+              onOpenAddClient={() => {
+                setEditingClient(null);
+                setIsAddClientModalOpen(true);
+              }}
+              onOpenEditClient={(client) => {
+                setEditingClient(client);
+                setIsAddClientModalOpen(true);
+              }}
+              onOpenViewClient={(client) => setViewingClient(client)}
+              onDeleteClient={handleDeleteClient}
+              onOpenImportModal={() => setIsImportModalOpen(true)}
+              onExportCSV={handleExportClientsCSV}
+              onNavigateToMonthlyWork={(gstin) => {
+                setMonthlyWorkSearch(gstin || '');
+                setMonthlyWorkStatusFilter('all');
+                setActiveTab('monthly-work');
+              }}
+            />
+          )}
+
+          {activeTab === 'monthly-work' && (
+            <MonthlyWork
+              clients={clients}
+              monthlyWork={monthlyWork}
+              financialYears={financialYears}
+              selectedFY={selectedFY}
+              onSelectFY={handleSelectFY}
+              selectedMonth={selectedMonth}
+              onSelectMonth={handleSelectMonth}
+              users={users}
+              currentUser={currentUser}
+              onUpdateStatus={handleUpdateStatus}
+              initialSearchQuery={monthlyWorkSearch}
+              initialStatusFilter={monthlyWorkStatusFilter}
+              onExportCSV={handleExportMonthlyCSV}
+            />
+          )}
+
+          {activeTab === 'reports' && (
+            <Reports
+              clients={clients}
+              monthlyWork={monthlyWork}
+              financialYears={financialYears}
+              selectedFY={selectedFY}
+              selectedMonth={selectedMonth}
+              users={users}
+              onExportCSV={handleExportMonthlyCSV}
+            />
+          )}
+
+          {activeTab === 'financial-years' && (
+            <FinancialYears
+              financialYears={financialYears}
+              selectedFY={selectedFY}
+              onSelectFY={handleSelectFY}
+              onAddFY={handleAddFinancialYear}
+              monthlyWork={monthlyWork}
+            />
+          )}
+
+          {activeTab === 'users' && (
+            <StaffManagement
+              users={users}
+              clients={clients}
+              onAddUser={handleAddUser}
+            />
+          )}
+
+          {activeTab === 'activity-logs' && <ActivityLogs logs={activityLogs} />}
+
+          {activeTab === 'settings' && (
+            <SettingsModal
+              settings={settings}
+              onUpdateSettings={(newSet) => {
+                GSTStorage.saveSettings(newSet);
+                setSettings(newSet);
+                showToast('Settings saved successfully!');
+              }}
+              financialYears={financialYears}
+              onResetDatabase={handleResetDatabase}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Global Modals */}
+      <ClientFormModal
+        isOpen={isAddClientModalOpen}
+        onClose={() => {
+          setIsAddClientModalOpen(false);
+          setEditingClient(null);
+        }}
+        onSave={handleSaveClient}
+        editClient={editingClient}
+        users={users}
+      />
+
+      <ClientProfileModal
+        isOpen={!!viewingClient}
+        onClose={() => setViewingClient(null)}
+        client={viewingClient}
+        financialYears={financialYears}
+        selectedFY={selectedFY}
+        monthlyWork={monthlyWork}
+        workHistory={workHistory}
+        users={users}
+        onOpenEdit={(client) => {
+          setViewingClient(null);
+          setEditingClient(client);
+          setIsAddClientModalOpen(true);
+        }}
+        onNavigateToMonthlyWork={(gstin) => {
+          setViewingClient(null);
+          setMonthlyWorkSearch(gstin);
+          setActiveTab('monthly-work');
+        }}
+      />
+
+      <CsvImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        existingClients={clients}
+        onImportConfirmed={handleImportConfirmed}
+      />
+
+      <HostingerPackageModal
+        isOpen={isHostingerModalOpen}
+        onClose={() => setIsHostingerModalOpen(false)}
+      />
+    </div>
+  );
+}
