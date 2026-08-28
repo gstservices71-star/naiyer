@@ -187,11 +187,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <span>Financial Year {selectedFY.display_name} Work Status</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-              GST Work Dashboard — <span className="text-amber-300">{selectedMonth}</span>
+              GST WORK DASHBOARD CA RISHAB JAISWAL — <span className="text-amber-300">{selectedMonth}</span>
             </h1>
-            <p className="text-blue-100 text-xs md:text-sm mt-1 max-w-2xl">
-              Track monthly filing progress, pending documentation, tax payment statuses, and staff
-              assignments across master clients.
+            <p className="text-blue-100 text-xs md:text-sm mt-1 max-w-3xl">
+              Track monthly filing progress, pending documentation, tax payment statuses, and staff assignments across master clients. by Naiyer Iqbal 8228069899
             </p>
           </div>
 

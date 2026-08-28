@@ -1,6 +1,6 @@
 {
-  "name": "GST Client Work Management Admin Panel",
-  "description": "A comprehensive web-based GST client management and monthly GST work tracking admin panel with financial year isolation, staff assignments, status tracking, and export/import tools.",
+  "name": "GST WORK DASHBOARD CA RISHAB JAISWAL",
+  "description": "Track monthly filing progress, pending documentation, tax payment statuses, and staff assignments across master clients. by Naiyer Iqbal 8228069899",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
