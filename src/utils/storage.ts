@@ -193,10 +193,16 @@ export class GSTStorage {
   static getSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (!raw) {
-      this.saveSettings(initialSettings);
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
       return initialSettings;
     }
-    return JSON.parse(raw);
+    try {
+      const parsed = JSON.parse(raw);
+      return { ...initialSettings, ...parsed };
+    } catch {
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
+      return initialSettings;
+    }
   }
 
   // Sessions & Online Presence
@@ -320,11 +326,19 @@ export class GSTStorage {
   }
 
   static saveSettings(settings: AppSettings) {
-    const previous = this.getSettings();
+    let previous: AppSettings | null = null;
+    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (raw) {
+      try {
+        previous = JSON.parse(raw);
+      } catch {
+        previous = null;
+      }
+    }
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     this.logActivity('Settings Saved', 'Updated application configuration settings', {
       module: 'Settings',
-      oldValues: sanitizeAuditValues(previous),
+      oldValues: previous ? sanitizeAuditValues(previous) : null,
       newValues: sanitizeAuditValues(settings),
     });
   }
