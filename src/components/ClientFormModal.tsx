@@ -29,7 +29,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
     city: '',
     state: '',
     pin_code: '',
-    gst_type: 'regular' as 'regular' | 'composition',
+    gst_type: 'Normal' as 'Normal' | 'Composition' | 'QRMP',
     assigned_staff_id: '' as string | number,
     registration_date: new Date().toISOString().split('T')[0],
     status: 'active' as 'active' | 'inactive',
@@ -38,6 +38,14 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
 
   const [gstinFeedback, setGstinFeedback] = useState<{ isValid: boolean; error?: string; stateName?: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const normalizeCat = (val?: string): 'Normal' | 'Composition' | 'QRMP' => {
+    if (!val) return 'Normal';
+    const l = val.trim().toLowerCase();
+    if (l === 'composition') return 'Composition';
+    if (l === 'qrmp') return 'QRMP';
+    return 'Normal';
+  };
 
   useEffect(() => {
     if (editClient) {
@@ -52,7 +60,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
         city: editClient.city || '',
         state: editClient.state || '',
         pin_code: editClient.pin_code || '',
-        gst_type: editClient.gst_type,
+        gst_type: normalizeCat(editClient.gst_type),
         assigned_staff_id: editClient.assigned_staff_id || '',
         registration_date: editClient.registration_date || '',
         status: editClient.status,
@@ -71,7 +79,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
         city: '',
         state: '',
         pin_code: '',
-        gst_type: 'regular',
+        gst_type: 'Normal',
         assigned_staff_id: '',
         registration_date: new Date().toISOString().split('T')[0],
         status: 'active',
@@ -211,7 +219,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                GST Scheme <span className="text-rose-500">*</span>
+                Client Category <span className="text-rose-500">*</span>
               </label>
               <select
                 id="client-form-scheme-select"
@@ -219,13 +227,14 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 onChange={(e) =>
                   setFormData((prev) => ({
                     ...prev,
-                    gst_type: e.target.value as 'regular' | 'composition',
+                    gst_type: e.target.value as 'Normal' | 'Composition' | 'QRMP',
                   }))
                 }
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               >
-                <option value="regular">Regular (GSTR-1/3B)</option>
-                <option value="composition">Composition (CMP-08)</option>
+                <option value="Normal">Normal</option>
+                <option value="Composition">Composition</option>
+                <option value="QRMP">QRMP</option>
               </select>
             </div>
 
@@ -242,7 +251,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                     status: e.target.value as 'active' | 'inactive',
                   }))
                 }
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               >
                 <option value="active">Active (Filing Regular)</option>
                 <option value="inactive">Inactive / Suspended</option>
@@ -262,14 +271,14 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 placeholder="e.g. Apex Infotech Solutions"
                 value={formData.firm_name}
                 onChange={(e) => setFormData((prev) => ({ ...prev, firm_name: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
                 required
               />
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Client Contact Person <span className="text-rose-500">*</span>
+                Client Contact Person
               </label>
               <input
                 id="client-form-client-name-input"
@@ -277,17 +286,16 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 placeholder="e.g. Rajesh Nair"
                 value={formData.client_name}
                 onChange={(e) => setFormData((prev) => ({ ...prev, client_name: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                required
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               />
             </div>
           </div>
 
-          {/* Row 3: Mobile, Alternate Mobile, Email */}
+          {/* Row 3: Mobile 1, Mobile 2, Email */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Mobile Number <span className="text-rose-500">*</span>
+                Mobile 1 (Primary) <span className="text-rose-500">*</span>
               </label>
               <input
                 id="client-form-mobile-input"
@@ -301,19 +309,20 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                     mobile: e.target.value.replace(/[^0-9]/g, ''),
                   }))
                 }
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
                 required
               />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Alternate Phone</label>
+              <label className="block font-bold text-slate-700 mb-1">Mobile 2 (Alternate)</label>
               <input
+                id="client-form-mobile2-input"
                 type="tel"
-                placeholder="Optional"
+                placeholder="Secondary mobile (optional)"
                 value={formData.alternate_mobile}
-                onChange={(e) => setFormData((prev) => ({ ...prev, alternate_mobile: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                onChange={(e) => setFormData((prev) => ({ ...prev, alternate_mobile: e.target.value.replace(/[^0-9]/g, '') }))}
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               />
             </div>
 
@@ -324,12 +333,12 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 placeholder="client@domain.com"
                 value={formData.email}
                 onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               />
             </div>
           </div>
 
-          {/* Row 4: Address, City, State, PIN */}
+          {/* Row 4: Address, City, State / Region (Wide 2x), PIN */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 mb-1">Address</label>
@@ -338,7 +347,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 placeholder="Office or shop address"
                 value={formData.address}
                 onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               />
             </div>
 
@@ -349,18 +358,18 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 placeholder="City"
                 value={formData.city}
                 onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">State</label>
+              <label className="block font-bold text-slate-700 mb-1">State / Region (Wide)</label>
               <input
                 type="text"
-                placeholder="State"
+                placeholder="State or Region"
                 value={formData.state}
                 onChange={(e) => setFormData((prev) => ({ ...prev, state: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               />
             </div>
           </div>
@@ -373,7 +382,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 id="client-form-staff-select"
                 value={formData.assigned_staff_id}
                 onChange={(e) => setFormData((prev) => ({ ...prev, assigned_staff_id: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               >
                 <option value="">-- Unassigned --</option>
                 {staffMembers.map((staff) => (
@@ -390,25 +399,25 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                 type="date"
                 value={formData.registration_date}
                 onChange={(e) => setFormData((prev) => ({ ...prev, registration_date: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
               />
             </div>
           </div>
 
-          {/* Notes */}
+          {/* Remark / Notes */}
           <div>
-            <label className="block font-bold text-slate-700 mb-1">Notes / Instructions</label>
+            <label className="block font-bold text-slate-700 mb-1">Remark / Notes</label>
             <textarea
               rows={2}
-              placeholder="Add client-specific notes, portal login tips or filing instructions..."
+              placeholder="Add client remark, instructions or notes..."
               value={formData.notes}
               onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
             />
           </div>
 
           {/* Footer actions */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+          <div className="pt-3 border-t border-[#E8DCC4] flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
@@ -419,7 +428,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
             <button
               id="client-form-submit-btn"
               type="submit"
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs flex items-center gap-1.5"
+              className="px-5 py-2 rounded-xl bg-[#78350F] hover:bg-[#5C2809] text-white font-bold shadow-xs flex items-center gap-1.5 transition-colors"
             >
               <Check className="w-4 h-4" />
               <span>{editClient ? 'Update Master Client' : 'Save Master Client'}</span>

@@ -60,6 +60,14 @@ const REMARK_PRESETS = [
   'Nil return filed.',
 ];
 
+const normalizeCat = (val?: string): 'Normal' | 'Composition' | 'QRMP' => {
+  if (!val) return 'Normal';
+  const lower = val.trim().toLowerCase();
+  if (lower === 'composition') return 'Composition';
+  if (lower === 'qrmp') return 'QRMP';
+  return 'Normal';
+};
+
 export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   clients,
   monthlyWork,
@@ -124,18 +132,23 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   // Filter clients
   const filteredClients = useMemo(() => {
     return activeClients.filter((client) => {
-      // Search
+      // Search across GSTIN, Firm Name, Client Name, Mobile 1, Mobile 2
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         const matchesGSTIN = client.gstin.toLowerCase().includes(q);
         const matchesFirm = client.firm_name.toLowerCase().includes(q);
-        const matchesClient = client.client_name.toLowerCase().includes(q);
-        if (!matchesGSTIN && !matchesFirm && !matchesClient) return false;
+        const matchesClient = client.client_name ? client.client_name.toLowerCase().includes(q) : false;
+        const matchesMobile1 = client.mobile ? client.mobile.includes(q) : false;
+        const matchesMobile2 = client.alternate_mobile ? client.alternate_mobile.includes(q) : false;
+        if (!matchesGSTIN && !matchesFirm && !matchesClient && !matchesMobile1 && !matchesMobile2) return false;
       }
 
-      // Scheme
-      if (schemeFilter !== 'all' && client.gst_type !== schemeFilter) {
-        return false;
+      // Scheme / Category
+      if (schemeFilter !== 'all') {
+        const cat = normalizeCat(client.gst_type);
+        if (cat !== schemeFilter) {
+          return false;
+        }
       }
 
       // Staff
@@ -351,41 +364,43 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div className="bg-white p-3.5 rounded-2xl border border-[#E8DCC4] shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             id="monthly-work-search-input"
             type="text"
-            placeholder="Search by GSTIN or Firm Name..."
+            placeholder="Search by Firm, GSTIN or Mobile..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+            className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* Scheme */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
-            <span className="text-slate-500 font-medium">Scheme:</span>
+          {/* Category Filter */}
+          <div className="flex items-center gap-1 bg-[#FAF6F0] border border-[#E8DCC4] rounded-xl px-2.5 py-1 text-xs">
+            <span className="text-[#78350F] font-bold">Category:</span>
             <select
+              id="monthly-work-category-filter"
               value={schemeFilter}
               onChange={(e) => setSchemeFilter(e.target.value)}
-              className="bg-transparent font-semibold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
             >
-              <option value="all">All</option>
-              <option value="regular">Regular</option>
-              <option value="composition">Composition</option>
+              <option value="all">All Categories</option>
+              <option value="Normal">Normal</option>
+              <option value="Composition">Composition</option>
+              <option value="QRMP">QRMP</option>
             </select>
           </div>
 
           {/* Staff */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
-            <span className="text-slate-500 font-medium">Staff:</span>
+          <div className="flex items-center gap-1 bg-[#FAF6F0] border border-[#E8DCC4] rounded-xl px-2.5 py-1 text-xs">
+            <span className="text-[#78350F] font-bold">Staff:</span>
             <select
               value={staffFilter}
               onChange={(e) => setStaffFilter(e.target.value)}
-              className="bg-transparent font-semibold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
             >
               <option value="all">All Staff</option>
               <option value="unassigned">Unassigned</option>
@@ -407,24 +422,24 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                 setStaffFilter('all');
                 setStatusFilter('all');
               }}
-              className="text-xs text-blue-600 hover:text-blue-800 font-semibold px-2 py-1"
+              className="text-xs text-[#78350F] hover:text-[#5C2809] font-bold px-2 py-1 underline"
             >
-              Clear
+              Clear Filters
             </button>
           )}
         </div>
       </div>
 
       {/* Monthly Work Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-[#E8DCC4] shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <thead className="bg-[#FAF6F0] border-b border-[#E8DCC4] text-[11px] font-bold text-[#78350F] uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3" style={{ width: '25%' }}>Client & GSTIN</th>
-                <th className="px-4 py-3" style={{ width: '12%' }}>Scheme / Staff</th>
-                <th className="px-4 py-3" style={{ width: '22%' }}>Compliance Status</th>
-                <th className="px-4 py-3" style={{ width: '31%' }}>Remark & Notes</th>
+                <th className="px-4 py-3" style={{ width: '28%' }}>Client / Contact</th>
+                <th className="px-4 py-3" style={{ width: '14%' }}>Category / Staff</th>
+                <th className="px-4 py-3" style={{ width: '20%' }}>Compliance Status</th>
+                <th className="px-4 py-3" style={{ width: '28%' }}>Filing Note</th>
                 <th className="px-4 py-3 text-right" style={{ width: '10%' }}>Action</th>
               </tr>
             </thead>
@@ -446,6 +461,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                       ? draftRemarks[client.id]
                       : (record?.remark || '');
                   const isSaved = savedRowIds[client.id];
+                  const category = normalizeCat(client.gst_type);
 
                   // Status background styling for selector
                   const statusBgMap: Record<WorkStatus, string> = {
@@ -462,40 +478,55 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                   return (
                     <tr
                       key={client.id}
-                      className={`hover:bg-slate-50/70 transition-colors ${
+                      className={`hover:bg-[#FAF6F0]/40 transition-colors ${
                         isSaved ? 'bg-emerald-50/40' : ''
                       }`}
                     >
-                      {/* Client & GSTIN */}
+                      {/* Client / Firm Name & Permanent Mobile 1 and Mobile 2 */}
                       <td className="px-4 py-3">
-                        <div className="font-bold text-slate-900 leading-tight">
+                        <div className="font-bold text-slate-900 leading-tight text-xs">
                           {client.firm_name}
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="font-mono text-[11px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                        {/* Permanently displayed Mobile 1 & Mobile 2 directly underneath */}
+                        <div className="text-[11px] font-mono mt-1 space-y-0.5">
+                          <div className="text-slate-800 font-medium">
+                            📱 Mobile 1: <span className="font-bold text-slate-900">{client.mobile || '—'}</span>
+                          </div>
+                          <div className="text-slate-600">
+                            📱 Mobile 2: <span className="font-medium text-slate-700">{client.alternate_mobile ? client.alternate_mobile : '—'}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span className="font-mono text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                             {client.gstin}
                           </span>
-                          <span className="text-[11px] text-slate-500">
-                            {client.client_name}
-                          </span>
+                          {client.client_name && (
+                            <span className="text-[11px] text-slate-500 truncate max-w-[120px]">
+                              {client.client_name}
+                            </span>
+                          )}
                         </div>
                       </td>
 
-                      {/* Scheme & Staff */}
+                      {/* Category & Staff */}
                       <td className="px-4 py-3">
                         <div>
-                          <span
-                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                              client.gst_type === 'regular'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-purple-100 text-purple-800'
-                            }`}
-                          >
-                            {client.gst_type}
-                          </span>
+                          {category === 'Composition' ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-purple-100 text-purple-900 border border-purple-200">
+                              Composition
+                            </span>
+                          ) : category === 'QRMP' ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-teal-100 text-teal-900 border border-teal-200">
+                              QRMP
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-[#FAF6F0] text-[#78350F] border border-[#E8DCC4]">
+                              Normal
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[11px] text-slate-600 mt-1 flex items-center gap-1">
-                          <UserCheck className="w-3 h-3 text-slate-400" />
+                        <div className="text-[11px] text-slate-600 mt-1.5 flex items-center gap-1">
+                          <UserCheck className="w-3.5 h-3.5 text-slate-400" />
                           <span>{getStaffName(client.assigned_staff_id)}</span>
                         </div>
                       </td>
@@ -506,7 +537,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                           id={`work-status-select-${client.id}`}
                           value={currentStatus}
                           onChange={(e) => handleStatusChange(client.id, e.target.value as WorkStatus)}
-                          className={`w-full font-bold text-xs rounded-xl px-2.5 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                          className={`w-full font-bold text-xs rounded-xl px-2.5 py-1.5 border focus:outline-none focus:ring-2 focus:ring-[#78350F] cursor-pointer ${
                             statusBgMap[currentStatus]
                           }`}
                         >
@@ -524,57 +555,19 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                         )}
                       </td>
 
-                      {/* Remark Input with Presets */}
+                      {/* Filing Note Input */}
                       <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          <input
-                            type="text"
-                            placeholder="Add filing note or reason..."
-                            value={currentRemark}
-                            onChange={(e) => handleRemarkChange(client.id, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveRow(client.id);
-                            }}
-                            className="w-full bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                          />
-
-                          {/* Quick Preset Badges */}
-                          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-                            <span className="text-[10px] text-slate-400 font-semibold shrink-0">
-                              Quick:
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleRemarkChange(client.id, 'Bill Pending');
-                                handleStatusChange(client.id, 'Bill Pending');
-                              }}
-                              className="text-[10px] bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 px-1.5 py-0.2 rounded font-medium shrink-0"
-                            >
-                              Bill Pending
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleRemarkChange(client.id, 'Tax Payment Pending');
-                                handleStatusChange(client.id, 'Tax Payment Pending');
-                              }}
-                              className="text-[10px] bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 px-1.5 py-0.2 rounded font-medium shrink-0"
-                            >
-                              Tax Pending
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleRemarkChange(client.id, 'Filed on GST Portal.');
-                                handleStatusChange(client.id, 'Completed');
-                              }}
-                              className="text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.2 rounded font-medium shrink-0"
-                            >
-                              Filing Done
-                            </button>
-                          </div>
-                        </div>
+                        <input
+                          id={`work-remark-input-${client.id}`}
+                          type="text"
+                          placeholder="+ Add Filing Note..."
+                          value={currentRemark}
+                          onChange={(e) => handleRemarkChange(client.id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveRow(client.id);
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white transition-all"
+                        />
                       </td>
 
                       {/* Action */}
@@ -582,10 +575,10 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                         <button
                           id={`work-save-row-btn-${client.id}`}
                           onClick={() => handleSaveRow(client.id)}
-                          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                             isSaved
                               ? 'bg-emerald-600 text-white shadow-xs'
-                              : 'bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200'
+                              : 'bg-[#FAF6F0] text-[#78350F] hover:bg-[#78350F] hover:text-white border border-[#E8DCC4]'
                           }`}
                         >
                           {isSaved ? (

@@ -15,7 +15,8 @@ export interface User {
   last_login?: string | null;
 }
 
-export type GSTType = 'regular' | 'composition';
+export type GSTType = 'Normal' | 'Composition' | 'QRMP' | 'regular' | 'composition' | 'qrmp';
+export type ClientCategory = 'Normal' | 'Composition' | 'QRMP';
 export type ClientStatus = 'active' | 'inactive';
 
 export interface Client {

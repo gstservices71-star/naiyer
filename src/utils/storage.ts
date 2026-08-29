@@ -193,14 +193,12 @@ export class GSTStorage {
   static getSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
       return initialSettings;
     }
     try {
       const parsed = JSON.parse(raw);
       return { ...initialSettings, ...parsed };
     } catch {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
       return initialSettings;
     }
   }

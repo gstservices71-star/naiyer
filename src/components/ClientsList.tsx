@@ -37,6 +37,14 @@ interface ClientsListProps {
   onNavigateToBankTurnover?: (clientId: number) => void;
 }
 
+export const getClientCategory = (category?: string): 'Normal' | 'Composition' | 'QRMP' => {
+  if (!category) return 'Normal';
+  const c = category.trim().toLowerCase();
+  if (c === 'composition') return 'Composition';
+  if (c === 'qrmp') return 'QRMP';
+  return 'Normal';
+};
+
 export const ClientsList: React.FC<ClientsListProps> = ({
   clients,
   users,
@@ -80,16 +88,21 @@ export const ClientsList: React.FC<ClientsListProps> = ({
         const matchesGSTIN = client.gstin.toLowerCase().includes(query);
         const matchesFirm = client.firm_name.toLowerCase().includes(query);
         const matchesName = client.client_name.toLowerCase().includes(query);
-        const matchesMobile = client.mobile.includes(query);
+        const matchesMobile1 = client.mobile ? client.mobile.includes(query) : false;
+        const matchesMobile2 = client.alternate_mobile ? client.alternate_mobile.includes(query) : false;
+        const matchesRemark = client.notes ? client.notes.toLowerCase().includes(query) : false;
         const matchesCity = client.city?.toLowerCase().includes(query) || false;
-        if (!matchesGSTIN && !matchesFirm && !matchesName && !matchesMobile && !matchesCity) {
+        if (!matchesGSTIN && !matchesFirm && !matchesName && !matchesMobile1 && !matchesMobile2 && !matchesRemark && !matchesCity) {
           return false;
         }
       }
 
-      // Filter scheme
-      if (filterScheme !== 'all' && client.gst_type !== filterScheme) {
-        return false;
+      // Filter category: Normal | Composition | QRMP
+      if (filterScheme !== 'all') {
+        const cat = getClientCategory(client.gst_type);
+        if (cat !== filterScheme) {
+          return false;
+        }
       }
 
       // Filter status
@@ -123,6 +136,28 @@ export const ClientsList: React.FC<ClientsListProps> = ({
     return staff ? staff.name : 'Unknown';
   };
 
+  const getCategoryBadge = (category: 'Normal' | 'Composition' | 'QRMP') => {
+    if (category === 'Composition') {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-200">
+          Composition
+        </span>
+      );
+    }
+    if (category === 'QRMP') {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-teal-100 text-teal-900 border border-teal-200">
+          QRMP
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-[#FBF5EE] text-[#78350F] border border-[#E9D7BE]">
+        Normal
+      </span>
+    );
+  };
+
   const getStatusBadge = (status: WorkStatus) => {
     const styleMap: Record<WorkStatus, string> = {
       Completed: 'bg-emerald-100 text-emerald-800 border-emerald-200',
@@ -146,13 +181,13 @@ export const ClientsList: React.FC<ClientsListProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 bg-white p-2 sm:p-4 rounded-2xl border border-[#E8DCC4] shadow-xs">
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <span>Master GST Clients Directory</span>
-            <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-[#FBF5EE] text-[#78350F] border border-[#E9D7BE] font-bold px-2 py-0.5 rounded-full">
               {filteredClients.length} Clients
             </span>
           </h2>
@@ -176,10 +211,10 @@ export const ClientsList: React.FC<ClientsListProps> = ({
             <button
               id="clients-import-csv-btn"
               onClick={onOpenImportModal}
-              className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-2 rounded-xl transition-colors"
+              className="flex items-center gap-1.5 bg-[#FBF5EE] hover:bg-[#F3E8D7] text-[#78350F] border border-[#E9D7BE] font-semibold text-xs px-3 py-2 rounded-xl transition-colors"
               title="Bulk import clients with validation"
             >
-              <FileUp className="w-3.5 h-3.5 text-blue-600" />
+              <FileUp className="w-3.5 h-3.5 text-[#78350F]" />
               <span>Import CSV</span>
             </button>
           )}
@@ -188,7 +223,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
             <button
               id="clients-add-new-btn"
               onClick={onOpenAddClient}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-colors"
+              className="flex items-center gap-1.5 bg-[#78350F] hover:bg-[#5C2809] text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-colors"
             >
               <Plus className="w-4 h-4" />
               <span>Add Client</span>
@@ -205,22 +240,22 @@ export const ClientsList: React.FC<ClientsListProps> = ({
           <input
             id="clients-search-input"
             type="text"
-            placeholder="Search by GSTIN, Firm, Name, Phone..."
+            placeholder="Search by GSTIN, Firm, Name, Phone, Remark..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+            className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
           />
         </div>
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* Scheme Filter */}
+          {/* Category Filter (Normal | Composition | QRMP) */}
           <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-500 font-medium">Scheme:</span>
+            <Filter className="w-3.5 h-3.5 text-[#78350F]" />
+            <span className="text-slate-500 font-medium">Category:</span>
             <select
               id="clients-filter-scheme"
               value={filterScheme}
@@ -228,11 +263,12 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                 setFilterScheme(e.target.value);
                 setCurrentPage(1);
               }}
-              className="bg-transparent font-semibold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              className="bg-transparent font-semibold text-[#78350F] focus:outline-none cursor-pointer text-xs"
             >
-              <option value="all">All Schemes</option>
-              <option value="regular">Regular</option>
-              <option value="composition">Composition</option>
+              <option value="all">All Categories</option>
+              <option value="Normal">Normal</option>
+              <option value="Composition">Composition</option>
+              <option value="QRMP">QRMP</option>
             </select>
           </div>
 
@@ -288,7 +324,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                 setFilterStaff('all');
                 setCurrentPage(1);
               }}
-              className="text-xs text-blue-600 hover:text-blue-800 font-semibold px-2 py-1"
+              className="text-xs text-[#78350F] hover:text-[#5C2809] font-bold px-2 py-1"
             >
               Reset Filters
             </button>
@@ -299,12 +335,15 @@ export const ClientsList: React.FC<ClientsListProps> = ({
       {/* Table Card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+          <table className="w-full text-left text-xs text-slate-700 min-w-[900px]">
+            <thead className="bg-[#FAF6F0] border-b border-[#E8DCC4] text-[11px] font-bold text-[#78350F] uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3">GSTIN / Scheme</th>
-                <th className="px-4 py-3">Firm & Contact Person</th>
-                <th className="px-4 py-3">Phone & Location</th>
+                <th className="px-4 py-3">Client</th>
+                <th className="px-4 py-3">Mobile 1</th>
+                <th className="px-4 py-3">Mobile 2</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Remark</th>
+                <th className="px-4 py-3">GSTIN</th>
                 <th className="px-4 py-3">Assigned Staff</th>
                 <th className="px-4 py-3 text-center">
                   Work Status ({selectedMonth})
@@ -315,8 +354,8 @@ export const ClientsList: React.FC<ClientsListProps> = ({
             <tbody className="divide-y divide-slate-100">
               {paginatedClients.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-10 text-slate-400">
-                    <Building className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                  <td colSpan={9} className="text-center py-10 text-slate-400">
+                    <Building className="w-8 h-8 mx-auto mb-2 text-[#C4A480]" />
                     <p className="font-semibold text-slate-600">No clients match your filter criteria.</p>
                     <p className="text-xs text-slate-400 mt-1">
                       Try searching with another keyword or add a new client.
@@ -327,63 +366,72 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                 paginatedClients.map((client) => {
                   const currentWork = currentMonthWorkMap.get(client.id);
                   const currentStatus: WorkStatus = currentWork ? currentWork.status : 'Not Started';
+                  const category = getClientCategory(client.gst_type);
 
                   return (
                     <tr
                       key={client.id}
-                      className="hover:bg-slate-50/70 transition-colors group"
+                      className="hover:bg-[#FCF9F5] transition-colors group"
                     >
-                      {/* GSTIN & Scheme */}
+                      {/* 1. Client (Firm Name & Contact Person) */}
                       <td className="px-4 py-3">
+                        <div
+                          onClick={() => onOpenViewClient(client)}
+                          className="font-bold text-slate-900 hover:text-[#78350F] cursor-pointer"
+                        >
+                          {client.firm_name}
+                        </div>
+                        <div className="text-slate-500 text-[11px] mt-0.5">
+                          Contact: <span className="font-medium text-slate-700">{client.client_name || '—'}</span>
+                        </div>
+                      </td>
+
+                      {/* 2. Mobile 1 (Permanent) */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 font-mono font-semibold text-slate-900 whitespace-nowrap">
+                          <span className="text-[#78350F]">📱</span>
+                          <span>{client.mobile || '—'}</span>
+                        </div>
+                      </td>
+
+                      {/* 3. Mobile 2 (Permanent) */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 font-mono text-slate-700 whitespace-nowrap">
+                          <span className="text-slate-400">📱</span>
+                          <span>{client.alternate_mobile ? client.alternate_mobile : '—'}</span>
+                        </div>
+                      </td>
+
+                      {/* 4. Category (Normal | Composition | QRMP) */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {getCategoryBadge(category)}
+                      </td>
+
+                      {/* 5. Remark (Permanent) */}
+                      <td className="px-4 py-3">
+                        <div className="text-xs text-slate-600 max-w-[180px] truncate" title={client.notes || 'No remark'}>
+                          {client.notes ? client.notes : '—'}
+                        </div>
+                      </td>
+
+                      {/* 6. GSTIN */}
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <span className="font-mono font-bold text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs">
                             {client.gstin}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span
-                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                              client.gst_type === 'regular'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-purple-100 text-purple-800'
-                            }`}
-                          >
-                            {client.gst_type}
-                          </span>
-                          {client.status === 'inactive' && (
+                        {client.status === 'inactive' && (
+                          <div className="mt-1">
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200 text-slate-700">
                               Inactive
                             </span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </td>
 
-                      {/* Firm & Contact Person */}
-                      <td className="px-4 py-3">
-                        <div
-                          onClick={() => onOpenViewClient(client)}
-                          className="font-bold text-slate-900 hover:text-blue-600 cursor-pointer flex items-center gap-1.5"
-                        >
-                          <span>{client.firm_name}</span>
-                        </div>
-                        <div className="text-slate-500 text-[11px] mt-0.5">
-                          Contact: <span className="font-medium text-slate-700">{client.client_name}</span>
-                        </div>
-                      </td>
-
-                      {/* Phone & Location */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 text-slate-800 font-medium">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          <span>{client.mobile}</span>
-                        </div>
-                        <div className="text-slate-400 text-[11px] mt-0.5 truncate max-w-[160px]">
-                          {client.city ? `${client.city}, ${client.state || ''}` : client.state || '-'}
-                        </div>
-                      </td>
-
-                      {/* Assigned Staff */}
-                      <td className="px-4 py-3">
+                      {/* 7. Assigned Staff */}
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <UserCheck className="w-3.5 h-3.5 text-slate-400" />
                           <span className="font-medium text-slate-800">
@@ -392,7 +440,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                         </div>
                       </td>
 
-                      {/* Work Status for Current Month */}
+                      {/* 8. Work Status for Current Month */}
                       <td className="px-4 py-3 text-center">
                         <div>{getStatusBadge(currentStatus)}</div>
                         {currentWork?.remark && (
@@ -405,13 +453,13 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                         )}
                       </td>
 
-                      {/* Actions */}
-                      <td className="px-4 py-3 text-right">
+                      {/* 9. Actions */}
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             id={`client-view-btn-${client.id}`}
                             onClick={() => onOpenViewClient(client)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-[#78350F] hover:bg-[#FBF5EE] transition-colors"
                             title="View Full Profile, Bank Turnover & GST Matrix"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -421,7 +469,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                             <button
                               id={`client-bank-btn-${client.id}`}
                               onClick={() => onNavigateToBankTurnover(client.id)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#78350F] hover:bg-[#FBF5EE] transition-colors"
                               title="Manage Monthly Bank Turnover"
                             >
                               <Landmark className="w-3.5 h-3.5" />
@@ -441,7 +489,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                             <button
                               id={`client-edit-btn-${client.id}`}
                               onClick={() => onOpenEditClient(client)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#78350F] hover:bg-[#FBF5EE] transition-colors"
                               title="Edit Client"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
