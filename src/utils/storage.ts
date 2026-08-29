@@ -84,28 +84,74 @@ const STORAGE_KEYS = {
   CURRENT_SESSION_ID: 'gst_app_current_session_id',
 };
 
+// Resilient In-Memory Storage Fallback for restricted / private iframe environments
+const memoryStore: Record<string, string> = {};
+
+function safeGetItem(key: string): string | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const val = window.localStorage.getItem(key);
+      if (val !== null) return val;
+    }
+  } catch {
+    // LocalStorage blocked or restricted
+  }
+  return memoryStore[key] ?? null;
+}
+
+function safeSetItem(key: string, value: string): void {
+  memoryStore[key] = value;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, value);
+    }
+  } catch {
+    // LocalStorage quota or permission issue, fallback kept in memoryStore
+  }
+}
+
+function safeRemoveItem(key: string): void {
+  delete memoryStore[key];
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+function safeParse<T>(raw: string | null, defaultValue: T): T {
+  if (!raw) return defaultValue;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return defaultValue;
+  }
+}
+
 export class GSTStorage {
   // Getters
   static getUsers(): User[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+    const raw = safeGetItem(STORAGE_KEYS.USERS);
     if (!raw) {
       this.saveUsers(initialUsers);
       return initialUsers;
     }
-    return JSON.parse(raw);
+    return safeParse<User[]>(raw, initialUsers);
   }
 
   static saveUsers(users: User[]) {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
   }
 
   static getClients(): Client[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS);
+    const raw = safeGetItem(STORAGE_KEYS.CLIENTS);
     if (!raw) {
       this.saveClients(initialClients);
       return initialClients;
     }
-    return JSON.parse(raw);
+    return safeParse<Client[]>(raw, initialClients);
   }
 
   static getClientById(id: number): Client | undefined {
@@ -113,17 +159,17 @@ export class GSTStorage {
   }
 
   static saveClients(clients: Client[]) {
-    localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
   }
 
   static getFinancialYears(): FinancialYear[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.FINANCIAL_YEARS);
+    const raw = safeGetItem(STORAGE_KEYS.FINANCIAL_YEARS);
     if (!raw) {
       this.saveFinancialYears(initialFinancialYears);
       return initialFinancialYears;
     }
     try {
-      const parsed: FinancialYear[] = JSON.parse(raw);
+      const parsed: FinancialYear[] = safeParse<FinancialYear[]>(raw, initialFinancialYears);
       // Ensure all 30+ future financial years exist in the list
       if (parsed.length < initialFinancialYears.length) {
         const existingNames = new Set(parsed.map((f) => f.display_name));
@@ -148,50 +194,50 @@ export class GSTStorage {
   }
 
   static saveFinancialYears(fys: FinancialYear[]) {
-    localStorage.setItem(STORAGE_KEYS.FINANCIAL_YEARS, JSON.stringify(fys));
+    safeSetItem(STORAGE_KEYS.FINANCIAL_YEARS, JSON.stringify(fys));
   }
 
   static getMonthlyWork(): MonthlyWork[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.MONTHLY_WORK);
+    const raw = safeGetItem(STORAGE_KEYS.MONTHLY_WORK);
     if (!raw) {
       this.saveMonthlyWork(initialMonthlyWork);
       return initialMonthlyWork;
     }
-    return JSON.parse(raw);
+    return safeParse<MonthlyWork[]>(raw, initialMonthlyWork);
   }
 
   static saveMonthlyWork(work: MonthlyWork[]) {
-    localStorage.setItem(STORAGE_KEYS.MONTHLY_WORK, JSON.stringify(work));
+    safeSetItem(STORAGE_KEYS.MONTHLY_WORK, JSON.stringify(work));
   }
 
   static getWorkHistory(): WorkHistory[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.WORK_HISTORY);
+    const raw = safeGetItem(STORAGE_KEYS.WORK_HISTORY);
     if (!raw) {
       this.saveWorkHistory(initialWorkHistory);
       return initialWorkHistory;
     }
-    return JSON.parse(raw);
+    return safeParse<WorkHistory[]>(raw, initialWorkHistory);
   }
 
   static saveWorkHistory(history: WorkHistory[]) {
-    localStorage.setItem(STORAGE_KEYS.WORK_HISTORY, JSON.stringify(history));
+    safeSetItem(STORAGE_KEYS.WORK_HISTORY, JSON.stringify(history));
   }
 
   static getActivityLogs(): ActivityLog[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.ACTIVITY_LOGS);
+    const raw = safeGetItem(STORAGE_KEYS.ACTIVITY_LOGS);
     if (!raw) {
       this.saveActivityLogs(initialActivityLogs);
       return initialActivityLogs;
     }
-    return JSON.parse(raw);
+    return safeParse<ActivityLog[]>(raw, initialActivityLogs);
   }
 
   static saveActivityLogs(logs: ActivityLog[]) {
-    localStorage.setItem(STORAGE_KEYS.ACTIVITY_LOGS, JSON.stringify(logs));
+    safeSetItem(STORAGE_KEYS.ACTIVITY_LOGS, JSON.stringify(logs));
   }
 
   static getSettings(): AppSettings {
-    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    const raw = safeGetItem(STORAGE_KEYS.SETTINGS);
     if (!raw) {
       return initialSettings;
     }
@@ -205,24 +251,20 @@ export class GSTStorage {
 
   // Sessions & Online Presence
   static getSessions(): UserSession[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+    const raw = safeGetItem(STORAGE_KEYS.SESSIONS);
     if (!raw) return [];
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return [];
-    }
+    return safeParse<UserSession[]>(raw, []);
   }
 
   static saveSessions(sessions: UserSession[]) {
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+    safeSetItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
   }
 
   static getCurrentSessionId(): string {
-    let sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    let sid = safeGetItem(STORAGE_KEYS.CURRENT_SESSION_ID);
     if (!sid) {
       sid = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-      localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, sid);
+      safeSetItem(STORAGE_KEYS.CURRENT_SESSION_ID, sid);
     }
     return sid;
   }
@@ -230,7 +272,7 @@ export class GSTStorage {
   static startSession(user: User): UserSession {
     const sessions = this.getSessions();
     const sid = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-    localStorage.setItem(STORAGE_KEYS.CURRENT_SESSION_ID, sid);
+    safeSetItem(STORAGE_KEYS.CURRENT_SESSION_ID, sid);
 
     const now = getISTTimestamp();
     const newSession: UserSession = {
@@ -258,7 +300,7 @@ export class GSTStorage {
   }
 
   static endCurrentSession() {
-    const sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    const sid = safeGetItem(STORAGE_KEYS.CURRENT_SESSION_ID);
     const user = this.getCurrentUser();
     if (!sid && !user) return;
 
@@ -271,11 +313,11 @@ export class GSTStorage {
       return s;
     });
     this.saveSessions(updated);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    safeRemoveItem(STORAGE_KEYS.CURRENT_SESSION_ID);
   }
 
   static touchCurrentSession() {
-    const sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    const sid = safeGetItem(STORAGE_KEYS.CURRENT_SESSION_ID);
     const user = this.getCurrentUser();
     if (!sid || !user) return;
 
@@ -325,7 +367,7 @@ export class GSTStorage {
 
   static saveSettings(settings: AppSettings) {
     let previous: AppSettings | null = null;
-    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    const raw = safeGetItem(STORAGE_KEYS.SETTINGS);
     if (raw) {
       try {
         previous = JSON.parse(raw);
@@ -333,7 +375,7 @@ export class GSTStorage {
         previous = null;
       }
     }
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    safeSetItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     this.logActivity('Settings Saved', 'Updated application configuration settings', {
       module: 'Settings',
       oldValues: previous ? sanitizeAuditValues(previous) : null,
@@ -342,7 +384,7 @@ export class GSTStorage {
   }
 
   static getCurrentUser(): User | null {
-    const storedId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
+    const storedId = safeGetItem(STORAGE_KEYS.CURRENT_USER_ID);
     if (!storedId) return null;
     const users = this.getUsers();
     const found = users.find((u) => u.id === Number(storedId));
@@ -351,9 +393,9 @@ export class GSTStorage {
 
   static setCurrentUser(user: User | null) {
     if (user) {
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, String(user.id));
+      safeSetItem(STORAGE_KEYS.CURRENT_USER_ID, String(user.id));
     } else {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+      safeRemoveItem(STORAGE_KEYS.CURRENT_USER_ID);
     }
   }
 
@@ -439,7 +481,7 @@ export class GSTStorage {
 
   static logout() {
     const user = this.getCurrentUser();
-    const sid = localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    const sid = safeGetItem(STORAGE_KEYS.CURRENT_SESSION_ID);
     if (user) {
       this.logActivity('LOGOUT', `User ${user.name} logged out from the portal`, {
         module: 'Auth',
@@ -614,7 +656,7 @@ export class GSTStorage {
 
   static getSelectedFY(): FinancialYear {
     const fys = this.getFinancialYears();
-    const storedId = localStorage.getItem(STORAGE_KEYS.SELECTED_FY_ID);
+    const storedId = safeGetItem(STORAGE_KEYS.SELECTED_FY_ID);
     if (storedId) {
       const found = fys.find((f) => f.id === Number(storedId));
       if (found) return found;
@@ -623,16 +665,16 @@ export class GSTStorage {
   }
 
   static setSelectedFY(fy: FinancialYear) {
-    localStorage.setItem(STORAGE_KEYS.SELECTED_FY_ID, String(fy.id));
+    safeSetItem(STORAGE_KEYS.SELECTED_FY_ID, String(fy.id));
   }
 
   static getSelectedMonth(): string {
-    const stored = localStorage.getItem(STORAGE_KEYS.SELECTED_MONTH);
+    const stored = safeGetItem(STORAGE_KEYS.SELECTED_MONTH);
     return stored || 'August';
   }
 
   static setSelectedMonth(month: string) {
-    localStorage.setItem(STORAGE_KEYS.SELECTED_MONTH, month);
+    safeSetItem(STORAGE_KEYS.SELECTED_MONTH, month);
   }
 
   // Central Comprehensive Activity & Audit Logger
@@ -661,7 +703,7 @@ export class GSTStorage {
   ): ActivityLog {
     const currentUser = this.getCurrentUser();
     const logs = this.getActivityLogs();
-    const sid = options?.sessionId || localStorage.getItem(STORAGE_KEYS.CURRENT_SESSION_ID) || 'sess_default';
+    const sid = options?.sessionId || safeGetItem(STORAGE_KEYS.CURRENT_SESSION_ID) || 'sess_default';
 
     // Auto-detect client info if clientId provided
     let clientName = options?.clientName || null;
@@ -989,16 +1031,16 @@ export class GSTStorage {
   // BANK ACCOUNTS & TURNOVER
   // ==========================================
   static getBankAccounts(): ClientBankAccount[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.BANK_ACCOUNTS);
+    const raw = safeGetItem(STORAGE_KEYS.BANK_ACCOUNTS);
     if (!raw) {
       this.saveBankAccounts(initialBankAccounts);
       return initialBankAccounts;
     }
-    return JSON.parse(raw);
+    return safeParse<ClientBankAccount[]>(raw, initialBankAccounts);
   }
 
   static saveBankAccounts(accounts: ClientBankAccount[]) {
-    localStorage.setItem(STORAGE_KEYS.BANK_ACCOUNTS, JSON.stringify(accounts));
+    safeSetItem(STORAGE_KEYS.BANK_ACCOUNTS, JSON.stringify(accounts));
   }
 
   static getClientBankAccounts(clientId: number): ClientBankAccount[] {
@@ -1096,16 +1138,16 @@ export class GSTStorage {
   }
 
   static getBankTurnover(): ClientBankTurnover[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.BANK_TURNOVER);
+    const raw = safeGetItem(STORAGE_KEYS.BANK_TURNOVER);
     if (!raw) {
       this.saveBankTurnover(initialBankTurnover);
       return initialBankTurnover;
     }
-    return JSON.parse(raw);
+    return safeParse<ClientBankTurnover[]>(raw, initialBankTurnover);
   }
 
   static saveBankTurnover(turnoverList: ClientBankTurnover[]) {
-    localStorage.setItem(STORAGE_KEYS.BANK_TURNOVER, JSON.stringify(turnoverList));
+    safeSetItem(STORAGE_KEYS.BANK_TURNOVER, JSON.stringify(turnoverList));
   }
 
   static getClientBankTurnover(clientId: number, fyId: number): ClientBankTurnover[] {
@@ -1185,16 +1227,16 @@ export class GSTStorage {
   }
 
   static getBankStatementBackups(): BankStatementBackup[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.BANK_STATEMENTS);
+    const raw = safeGetItem(STORAGE_KEYS.BANK_STATEMENTS);
     if (!raw) {
       this.saveBankStatementBackups(initialBankStatementBackups);
       return initialBankStatementBackups;
     }
-    return JSON.parse(raw);
+    return safeParse<BankStatementBackup[]>(raw, initialBankStatementBackups);
   }
 
   static saveBankStatementBackups(backups: BankStatementBackup[]) {
-    localStorage.setItem(STORAGE_KEYS.BANK_STATEMENTS, JSON.stringify(backups));
+    safeSetItem(STORAGE_KEYS.BANK_STATEMENTS, JSON.stringify(backups));
   }
 
   static getClientBankStatements(clientId: number, fyId: number): BankStatementBackup[] {
@@ -1334,16 +1376,16 @@ export class GSTStorage {
   // GST MONTHLY TURNOVER (TAXABLE + EXEMPT)
   // ==========================================
   static getGstTurnover(): ClientGstTurnover[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.GST_TURNOVER);
+    const raw = safeGetItem(STORAGE_KEYS.GST_TURNOVER);
     if (!raw) {
       this.saveGstTurnover(initialGstTurnover);
       return initialGstTurnover;
     }
-    return JSON.parse(raw);
+    return safeParse<ClientGstTurnover[]>(raw, initialGstTurnover);
   }
 
   static saveGstTurnover(turnoverList: ClientGstTurnover[]) {
-    localStorage.setItem(STORAGE_KEYS.GST_TURNOVER, JSON.stringify(turnoverList));
+    safeSetItem(STORAGE_KEYS.GST_TURNOVER, JSON.stringify(turnoverList));
   }
 
   static getClientGstTurnover(clientId: number, fyId: number): ClientGstTurnover[] {
@@ -1515,19 +1557,19 @@ export class GSTStorage {
   }
 
   static resetToDefaultSeed() {
-    localStorage.removeItem(STORAGE_KEYS.USERS);
-    localStorage.removeItem(STORAGE_KEYS.CLIENTS);
-    localStorage.removeItem(STORAGE_KEYS.FINANCIAL_YEARS);
-    localStorage.removeItem(STORAGE_KEYS.MONTHLY_WORK);
-    localStorage.removeItem(STORAGE_KEYS.WORK_HISTORY);
-    localStorage.removeItem(STORAGE_KEYS.ACTIVITY_LOGS);
-    localStorage.removeItem(STORAGE_KEYS.SETTINGS);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
-    localStorage.removeItem(STORAGE_KEYS.SELECTED_FY_ID);
-    localStorage.removeItem(STORAGE_KEYS.SELECTED_MONTH);
-    localStorage.removeItem(STORAGE_KEYS.BANK_ACCOUNTS);
-    localStorage.removeItem(STORAGE_KEYS.BANK_TURNOVER);
-    localStorage.removeItem(STORAGE_KEYS.BANK_STATEMENTS);
-    localStorage.removeItem(STORAGE_KEYS.GST_TURNOVER);
+    safeRemoveItem(STORAGE_KEYS.USERS);
+    safeRemoveItem(STORAGE_KEYS.CLIENTS);
+    safeRemoveItem(STORAGE_KEYS.FINANCIAL_YEARS);
+    safeRemoveItem(STORAGE_KEYS.MONTHLY_WORK);
+    safeRemoveItem(STORAGE_KEYS.WORK_HISTORY);
+    safeRemoveItem(STORAGE_KEYS.ACTIVITY_LOGS);
+    safeRemoveItem(STORAGE_KEYS.SETTINGS);
+    safeRemoveItem(STORAGE_KEYS.CURRENT_USER_ID);
+    safeRemoveItem(STORAGE_KEYS.SELECTED_FY_ID);
+    safeRemoveItem(STORAGE_KEYS.SELECTED_MONTH);
+    safeRemoveItem(STORAGE_KEYS.BANK_ACCOUNTS);
+    safeRemoveItem(STORAGE_KEYS.BANK_TURNOVER);
+    safeRemoveItem(STORAGE_KEYS.BANK_STATEMENTS);
+    safeRemoveItem(STORAGE_KEYS.GST_TURNOVER);
   }
 }

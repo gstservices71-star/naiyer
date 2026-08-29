@@ -2,17 +2,14 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { FinancialReportData, FinancialYear, ReportType, FY_MONTHS } from '../types';
 
-// Format Indian Currency Number
+// Format Indian Currency Number for PDF rendering
 export const formatINRNumber = (val: number): string => {
   const num = Number(val) || 0;
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
+  const formatted = new Intl.NumberFormat('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
-    .format(num)
-    .replace('₹', '₹ ');
+  }).format(num);
+  return `Rs. ${formatted}`;
 };
 
 export const sanitizeFileName = (name: string): string => {
