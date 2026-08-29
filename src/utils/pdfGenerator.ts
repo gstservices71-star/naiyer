@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { FinancialReportData, FinancialYear, ReportType, FY_MONTHS } from '../types';
+import { FinancialReportData, FinancialYear, ReportType, FY_MONTHS, Client, WorkStatus } from '../types';
 
 // Format Indian Currency Number for PDF rendering
 export const formatINRNumber = (val: number): string => {
@@ -646,3 +646,325 @@ export const generateAllClientsReportPDF = (
   const fileName = `All_Clients_FY_${fy.display_name}_Turnover_Report.pdf`;
   doc.save(fileName);
 };
+
+export interface MonthlyWorkExportItem {
+  client: Client;
+  status: WorkStatus;
+  remark: string;
+  staffName: string;
+  updatedAt?: string;
+}
+
+export interface MonthlyWorkFilterInfo {
+  statusFilter: string;
+  schemeFilter: string;
+  staffFilter: string;
+  staffFilterName?: string;
+  searchTerm?: string;
+  isSelectedOnly?: boolean;
+}
+
+/**
+ * Generates an executive Landscape A4 PDF report for Monthly GST Work
+ * filtering exactly according to the user's active filters or custom selection.
+ */
+export const generateMonthlyWorkReportPDF = (
+  month: string,
+  financialYear: FinancialYear,
+  items: MonthlyWorkExportItem[],
+  filterInfo: MonthlyWorkFilterInfo,
+  companyName: string = 'CA RISHAB JAISWAL - TAX & GST PORTAL'
+): void => {
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
+  const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
+  const today = new Date().toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeStr = new Date().toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  // Color Palette
+  const navyBg: [number, number, number] = [15, 23, 42]; // Slate 900
+  const headerCardBg: [number, number, number] = [248, 250, 252]; // Slate 50
+
+  let currentY = 10;
+
+  // Header Banner
+  doc.setFillColor(...navyBg);
+  doc.rect(10, currentY, pageWidth - 20, 18, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(255, 255, 255);
+  doc.text(companyName.toUpperCase(), 16, currentY + 7);
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(203, 213, 225);
+  doc.text(
+    `MONTHLY GST WORK COMPLIANCE & STATUS REPORT • ${month.toUpperCase()} (FY ${financialYear.display_name})`,
+    16,
+    currentY + 13
+  );
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`Generated: ${today}, ${timeStr}`, pageWidth - 16, currentY + 10, { align: 'right' });
+
+  currentY += 22;
+
+  // Filter & Status Summary Strip Box
+  doc.setFillColor(...headerCardBg);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(10, currentY, pageWidth - 20, 18, 2, 2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('REPORT SCOPE & APPLIED FILTERS:', 14, currentY + 6);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+
+  const statusLabel = filterInfo.statusFilter === 'all' ? 'All Statuses' : filterInfo.statusFilter;
+  const schemeLabel = filterInfo.schemeFilter === 'all' ? 'All Categories' : filterInfo.schemeFilter;
+  const staffLabel = filterInfo.staffFilterName || (filterInfo.staffFilter === 'all' ? 'All Staff' : filterInfo.staffFilter);
+  const searchLabel = filterInfo.searchTerm?.trim() ? `"${filterInfo.searchTerm.trim()}"` : 'None';
+  const modeLabel = filterInfo.isSelectedOnly ? `Selected Clients (${items.length})` : `Filtered View (${items.length} Total)`;
+
+  const filterText1 = `• Scope: ${modeLabel}   • Status: ${statusLabel}   • Category: ${schemeLabel}`;
+  const filterText2 = `• Staff: ${staffLabel}   • Search Query: ${searchLabel}`;
+
+  doc.text(filterText1, 14, currentY + 11);
+  doc.text(filterText2, 14, currentY + 15);
+
+  // Status Breakdown counts
+  let completedCount = 0;
+  let billPendingCount = 0;
+  let taxPendingCount = 0;
+  let docsPendingCount = 0;
+  let clientPendingCount = 0;
+  let notStartedCount = 0;
+
+  items.forEach((item) => {
+    if (item.status === 'Completed') completedCount++;
+    else if (item.status === 'Bill Pending') billPendingCount++;
+    else if (item.status === 'Tax Payment Pending') taxPendingCount++;
+    else if (item.status === 'Documents Pending') docsPendingCount++;
+    else if (item.status === 'Client Response Pending') clientPendingCount++;
+    else notStartedCount++;
+  });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(16, 185, 129); // Emerald
+  doc.text(`Completed: ${completedCount}`, pageWidth - 16, currentY + 6, { align: 'right' });
+
+  doc.setTextColor(249, 115, 22); // Orange
+  doc.text(`Bill Pending: ${billPendingCount}`, pageWidth - 16, currentY + 10, { align: 'right' });
+
+  doc.setTextColor(239, 68, 68); // Red
+  doc.text(`Tax/Docs/Other: ${taxPendingCount + docsPendingCount + clientPendingCount + notStartedCount}`, pageWidth - 16, currentY + 14, { align: 'right' });
+
+  currentY += 22;
+
+  // Table Data
+  const tableHead = [
+    '#',
+    'GSTIN',
+    'Firm / Trade Name',
+    'Contact Person & Mobile',
+    'Category',
+    'Assigned Staff',
+    'Compliance Status',
+    'Filing Remark / Note',
+    'Last Updated',
+  ];
+
+  const tableBody = items.map((item, index) => {
+    const mobileStr = [item.client.mobile, item.client.alternate_mobile].filter(Boolean).join(', ');
+    const contactText = item.client.client_name ? `${item.client.client_name}\n${mobileStr}` : mobileStr || '-';
+    return [
+      String(index + 1),
+      item.client.gstin || 'Unregistered',
+      item.client.firm_name || 'N/A',
+      contactText,
+      item.client.gst_type || 'Normal',
+      item.staffName || 'Unassigned',
+      item.status,
+      item.remark || '-',
+      item.updatedAt || '-',
+    ];
+  });
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [tableHead],
+    body: tableBody,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [30, 58, 138], // Navy
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'left',
+      cellPadding: 2,
+    },
+    styles: {
+      fontSize: 7,
+      cellPadding: 1.8,
+      textColor: [30, 41, 59],
+      valign: 'middle',
+      lineColor: [226, 232, 240],
+      lineWidth: 0.2,
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 10, fontStyle: 'bold' },
+      1: { cellWidth: 34, fontStyle: 'bold', textColor: [15, 23, 42] },
+      2: { cellWidth: 55, fontStyle: 'bold' },
+      3: { cellWidth: 38 },
+      4: { cellWidth: 20 },
+      5: { cellWidth: 26 },
+      6: { cellWidth: 34, fontStyle: 'bold' },
+      7: { cellWidth: 48 },
+      8: { cellWidth: 22, fontSize: 6.5, textColor: [100, 116, 139] },
+    },
+    margin: { left: 10, right: 10 },
+    didParseCell: (data) => {
+      // Highlight Status Column (Index 6)
+      if (data.section === 'body' && data.column.index === 6) {
+        const val = String(data.cell.raw || '');
+        if (val === 'Completed') {
+          data.cell.styles.textColor = [5, 150, 105]; // Emerald
+          data.cell.styles.fillColor = [236, 253, 245];
+        } else if (val === 'Bill Pending') {
+          data.cell.styles.textColor = [194, 65, 12]; // Orange
+          data.cell.styles.fillColor = [255, 247, 237];
+        } else if (val === 'Tax Payment Pending') {
+          data.cell.styles.textColor = [190, 18, 60]; // Rose
+          data.cell.styles.fillColor = [255, 241, 242];
+        } else if (val === 'Documents Pending') {
+          data.cell.styles.textColor = [126, 34, 206]; // Purple
+          data.cell.styles.fillColor = [250, 245, 255];
+        } else if (val === 'Client Response Pending') {
+          data.cell.styles.textColor = [14, 116, 144]; // Cyan
+          data.cell.styles.fillColor = [236, 254, 255];
+        } else {
+          data.cell.styles.textColor = [71, 85, 105]; // Slate
+          data.cell.styles.fillColor = [241, 245, 249];
+        }
+      }
+    },
+  });
+
+  // Footer on all pages
+  const totalPages = (doc.internal as any).getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+
+    doc.line(10, pageHeight - 10, pageWidth - 10, pageHeight - 10);
+    doc.text(
+      `${companyName} • GST Compliance Portal • Month: ${month.toUpperCase()} (${financialYear.display_name}) • Total Filtered: ${items.length}`,
+      10,
+      pageHeight - 6
+    );
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - 10, pageHeight - 6, { align: 'right' });
+  }
+
+  const filterSuffix = filterInfo.isSelectedOnly
+    ? `Selected_${items.length}`
+    : filterInfo.statusFilter !== 'all'
+    ? sanitizeFileName(filterInfo.statusFilter)
+    : 'All';
+  const cleanMonth = sanitizeFileName(month);
+  const cleanFY = sanitizeFileName(financialYear.display_name);
+  const fileName = `GST_Monthly_Work_${cleanMonth}_FY_${cleanFY}_${filterSuffix}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+  doc.save(fileName);
+};
+
+/**
+ * Generates and downloads a clean CSV file matching the active filters or selection
+ */
+export const generateMonthlyWorkReportCSV = (
+  month: string,
+  financialYear: FinancialYear,
+  items: MonthlyWorkExportItem[],
+  filterInfo: MonthlyWorkFilterInfo
+): void => {
+  const header = [
+    'S.No',
+    'GSTIN',
+    'Firm Name',
+    'Client / Proprietor Name',
+    'Mobile',
+    'Alternate Mobile',
+    'Email',
+    'Category / Scheme',
+    'Assigned Staff',
+    'Financial Year',
+    'Month',
+    'Compliance Status',
+    'Filing Remark / Note',
+    'Last Updated Date',
+  ];
+
+  const rows = items.map((item, index) => {
+    return [
+      String(index + 1),
+      `"${(item.client.gstin || '').replace(/"/g, '""')}"`,
+      `"${(item.client.firm_name || '').replace(/"/g, '""')}"`,
+      `"${(item.client.client_name || '').replace(/"/g, '""')}"`,
+      `"${(item.client.mobile || '').replace(/"/g, '""')}"`,
+      `"${(item.client.alternate_mobile || '').replace(/"/g, '""')}"`,
+      `"${(item.client.email || '').replace(/"/g, '""')}"`,
+      `"${(item.client.gst_type || 'Normal').replace(/"/g, '""')}"`,
+      `"${(item.staffName || 'Unassigned').replace(/"/g, '""')}"`,
+      `"${financialYear.display_name}"`,
+      `"${month}"`,
+      `"${(item.status || 'Not Started').replace(/"/g, '""')}"`,
+      `"${(item.remark || '').replace(/"/g, '""')}"`,
+      `"${(item.updatedAt || '').replace(/"/g, '""')}"`,
+    ];
+  });
+
+  const csvContent = '\uFEFF' + [header.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+
+  const filterSuffix = filterInfo.isSelectedOnly
+    ? `Selected_${items.length}`
+    : filterInfo.statusFilter !== 'all'
+    ? sanitizeFileName(filterInfo.statusFilter)
+    : 'All';
+  const cleanMonth = sanitizeFileName(month);
+  const cleanFY = sanitizeFileName(financialYear.display_name);
+  const fileName = `GST_Monthly_Work_${cleanMonth}_FY_${cleanFY}_${filterSuffix}_${new Date().toISOString().split('T')[0]}.csv`;
+
+  link.setAttribute('download', fileName);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+

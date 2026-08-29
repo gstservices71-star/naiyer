@@ -13,8 +13,21 @@ import {
   Check,
   FileSpreadsheet,
   FileDown,
+  FileText,
+  Download,
   Info,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  RotateCcw,
+  RefreshCw,
 } from 'lucide-react';
+import {
+  generateMonthlyWorkReportPDF,
+  generateMonthlyWorkReportCSV,
+  MonthlyWorkExportItem,
+  MonthlyWorkFilterInfo,
+} from '../utils/pdfGenerator';
 
 interface MonthlyWorkProps {
   clients: Client[];
@@ -35,7 +48,7 @@ interface MonthlyWorkProps {
   ) => void;
   initialSearchQuery?: string;
   initialStatusFilter?: string;
-  onExportCSV: () => void;
+  onExportCSV?: () => void;
 }
 
 const STATUS_OPTIONS: WorkStatus[] = [
@@ -92,6 +105,11 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   const [draftStatuses, setDraftStatuses] = useState<Record<number, WorkStatus>>({});
   const [draftRemarks, setDraftRemarks] = useState<Record<number, string>>({});
   const [savedRowIds, setSavedRowIds] = useState<Record<number, boolean>>({});
+
+  // Selection state for granular exports
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<number>>(new Set());
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   // Active clients
   const activeClients = useMemo(() => clients.filter((c) => c.status === 'active'), [clients]);
@@ -176,6 +194,119 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
     });
   }, [activeClients, searchTerm, schemeFilter, staffFilter, statusFilter, workMap, draftStatuses]);
 
+  // Selection toggle handlers
+  const handleToggleSelect = (clientId: number) => {
+    setSelectedClientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
+  };
+
+  const isAllFilteredSelected =
+    filteredClients.length > 0 && filteredClients.every((c) => selectedClientIds.has(c.id));
+  const isSomeFilteredSelected =
+    filteredClients.some((c) => selectedClientIds.has(c.id)) && !isAllFilteredSelected;
+
+  const handleToggleSelectAll = () => {
+    if (filteredClients.length === 0) return;
+    if (isAllFilteredSelected) {
+      setSelectedClientIds((prev) => {
+        const next = new Set(prev);
+        filteredClients.forEach((c) => next.delete(c.id));
+        return next;
+      });
+    } else {
+      setSelectedClientIds((prev) => {
+        const next = new Set(prev);
+        filteredClients.forEach((c) => next.add(c.id));
+        return next;
+      });
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedClientIds(new Set());
+  };
+
+  // Build filtered / selected data payload for exports
+  const getExportData = () => {
+    const isCustomSelection = selectedClientIds.size > 0;
+    const targetClients = isCustomSelection
+      ? filteredClients.filter((c) => selectedClientIds.has(c.id))
+      : filteredClients;
+
+    const exportItems: MonthlyWorkExportItem[] = targetClients.map((client) => {
+      const rec = workMap.get(client.id);
+      const status: WorkStatus = draftStatuses[client.id] || (rec ? rec.status : 'Not Started');
+      const remark =
+        draftRemarks[client.id] !== undefined
+          ? draftRemarks[client.id]
+          : rec?.remark || '';
+      const staff = users.find((u) => u.id === client.assigned_staff_id);
+      return {
+        client,
+        status,
+        remark,
+        staffName: staff ? staff.name : 'Unassigned',
+        updatedAt: rec?.updated_at,
+      };
+    });
+
+    const staffObj = users.find((u) => u.id === Number(staffFilter));
+    const filterInfo: MonthlyWorkFilterInfo = {
+      statusFilter,
+      schemeFilter,
+      staffFilter,
+      staffFilterName:
+        staffFilter === 'all'
+          ? 'All Staff'
+          : staffFilter === 'unassigned'
+          ? 'Unassigned Staff'
+          : staffObj?.name || staffFilter,
+      searchTerm,
+      isSelectedOnly: isCustomSelection,
+    };
+
+    return { exportItems, filterInfo, isCustomSelection };
+  };
+
+  const handleExportFilteredCSV = () => {
+    setIsExportingCsv(true);
+    try {
+      const { exportItems, filterInfo } = getExportData();
+      if (exportItems.length === 0) {
+        alert('No clients match your current filters or selection to export.');
+        return;
+      }
+      generateMonthlyWorkReportCSV(selectedMonth, selectedFY, exportItems, filterInfo);
+    } catch (err) {
+      console.error('Error generating CSV:', err);
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
+  const handleExportFilteredPDF = () => {
+    setIsExportingPdf(true);
+    try {
+      const { exportItems, filterInfo } = getExportData();
+      if (exportItems.length === 0) {
+        alert('No clients match your current filters or selection to export.');
+        return;
+      }
+      generateMonthlyWorkReportPDF(selectedMonth, selectedFY, exportItems, filterInfo);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const handleStatusChange = (clientId: number, newStatus: WorkStatus) => {
     setDraftStatuses((prev) => ({ ...prev, [clientId]: newStatus }));
     const currentRemark = draftRemarks[clientId] !== undefined
@@ -215,6 +346,8 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
     return s ? s.name : 'Unknown';
   };
 
+  const exportCount = selectedClientIds.size > 0 ? selectedClientIds.size : filteredClients.length;
+
   return (
     <div className="space-y-4">
       {/* Top Header Card */}
@@ -233,8 +366,8 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
           </p>
         </div>
 
-        {/* Month & FY Switcher */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Month & FY Switcher and Export Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center bg-blue-50 border border-blue-200 rounded-xl px-3 py-1.5 text-xs">
             <Calendar className="w-3.5 h-3.5 text-blue-600 mr-1.5" />
             <span className="font-bold text-blue-900 mr-1">FY:</span>
@@ -272,13 +405,36 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
             </select>
           </div>
 
+          {/* Export Filtered CSV */}
           <button
             id="monthly-work-export-csv-btn"
-            onClick={onExportCSV}
-            className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-1.5 rounded-xl transition-colors"
+            onClick={handleExportFilteredCSV}
+            disabled={isExportingCsv || filteredClients.length === 0}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Export CSV matching current filter or custom selection"
           >
-            <FileDown className="w-3.5 h-3.5" />
-            <span>Export Month CSV</span>
+            {isExportingCsv ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+            )}
+            <span>Export CSV ({exportCount})</span>
+          </button>
+
+          {/* Export Filtered PDF */}
+          <button
+            id="monthly-work-export-pdf-btn"
+            onClick={handleExportFilteredPDF}
+            disabled={isExportingPdf || filteredClients.length === 0}
+            className="flex items-center gap-1.5 bg-[#1E3A8A] hover:bg-[#172554] disabled:opacity-50 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Export official PDF report matching current filter or custom selection"
+          >
+            {isExportingPdf ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileText className="w-3.5 h-3.5" />
+            )}
+            <span>Export PDF ({exportCount})</span>
           </button>
         </div>
       </div>
@@ -430,23 +586,88 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
         </div>
       </div>
 
+      {/* Custom Selection Action Strip (When rows are selected) */}
+      {selectedClientIds.size > 0 && (
+        <div className="bg-[#FAF6F0] border-2 border-[#78350F] rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#78350F] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#78350F]"></span>
+            </span>
+            <span className="text-xs font-bold text-[#78350F]">
+              {selectedClientIds.size} client{selectedClientIds.size > 1 ? 's' : ''} specifically selected
+            </span>
+            <span className="text-[11px] text-slate-500 hidden sm:inline">
+              (Exporting will generate report for these selected records only)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleSelectAll}
+              className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-[#E8DCC4] px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            >
+              {isAllFilteredSelected ? 'Deselect Filtered' : `Select All Filtered (${filteredClients.length})`}
+            </button>
+            <button
+              onClick={handleClearSelection}
+              className="text-xs font-semibold text-rose-700 hover:text-rose-900 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            >
+              Clear
+            </button>
+            <button
+              onClick={handleExportFilteredCSV}
+              disabled={isExportingCsv}
+              className="text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>CSV ({selectedClientIds.size})</span>
+            </button>
+            <button
+              onClick={handleExportFilteredPDF}
+              disabled={isExportingPdf}
+              className="text-xs font-bold text-white bg-[#1E3A8A] hover:bg-[#172554] px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>PDF ({selectedClientIds.size})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Monthly Work Table */}
       <div className="bg-white rounded-2xl border border-[#E8DCC4] shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-[#FAF6F0] border-b border-[#E8DCC4] text-[11px] font-bold text-[#78350F] uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3" style={{ width: '28%' }}>Client / Contact</th>
+                <th className="px-3 py-3 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    title={isAllFilteredSelected ? 'Deselect All Filtered' : 'Select All Filtered'}
+                    className="text-slate-600 hover:text-slate-900 transition-colors p-1"
+                  >
+                    {isAllFilteredSelected ? (
+                      <CheckSquare className="w-4 h-4 text-[#78350F]" />
+                    ) : isSomeFilteredSelected ? (
+                      <MinusSquare className="w-4 h-4 text-[#78350F]" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3" style={{ width: '26%' }}>Client / Contact</th>
                 <th className="px-4 py-3" style={{ width: '14%' }}>Category / Staff</th>
                 <th className="px-4 py-3" style={{ width: '20%' }}>Compliance Status</th>
-                <th className="px-4 py-3" style={{ width: '28%' }}>Filing Note</th>
+                <th className="px-4 py-3" style={{ width: '26%' }}>Filing Note</th>
                 <th className="px-4 py-3 text-right" style={{ width: '10%' }}>Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-10 text-slate-400">
+                  <td colSpan={6} className="text-center py-10 text-slate-400">
                     <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-semibold text-slate-600">No client work items match your current filter.</p>
                   </td>
@@ -461,6 +682,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                       ? draftRemarks[client.id]
                       : (record?.remark || '');
                   const isSaved = savedRowIds[client.id];
+                  const isRowSelected = selectedClientIds.has(client.id);
                   const category = normalizeCat(client.gst_type);
 
                   // Status background styling for selector
@@ -479,9 +701,19 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                     <tr
                       key={client.id}
                       className={`hover:bg-[#FAF6F0]/40 transition-colors ${
-                        isSaved ? 'bg-emerald-50/40' : ''
+                        isRowSelected ? 'bg-[#FAF6F0]/70' : isSaved ? 'bg-emerald-50/40' : ''
                       }`}
                     >
+                      {/* Checkbox */}
+                      <td className="px-3 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isRowSelected}
+                          onChange={() => handleToggleSelect(client.id)}
+                          className="w-4 h-4 rounded text-[#78350F] focus:ring-[#78350F] border-slate-300 cursor-pointer"
+                        />
+                      </td>
+
                       {/* Client / Firm Name & Permanent Mobile 1 and Mobile 2 */}
                       <td className="px-4 py-3">
                         <div className="font-bold text-slate-900 leading-tight text-xs">
@@ -605,3 +837,4 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
     </div>
   );
 };
+
