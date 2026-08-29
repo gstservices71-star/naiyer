@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { GSTStorage } from '../utils/storage';
+import { CloudService } from '../utils/cloudService';
 import { User } from '../types';
 import {
   Receipt,
@@ -38,7 +39,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetSuccessMessage, setResetSuccessMessage] = useState('');
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -49,20 +50,39 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
     setIsLoading(true);
 
-    // Simulate standard server authentication roundtrip delay (400ms)
-    setTimeout(() => {
-      const res = GSTStorage.login(identifier, password);
+    try {
+      // 1. Try production cloud authentication first
+      const cloudRes = await CloudService.login(identifier, password);
+      if (cloudRes.success && cloudRes.user) {
+        GSTStorage.setCurrentUser(cloudRes.user);
+        GSTStorage.startSession(cloudRes.user);
+        setIsLoading(false);
+        onLoginSuccess(cloudRes.user);
+        return;
+      }
+
+      // 2. Fallback to local storage verification if offline or provision transition
+      const localRes = GSTStorage.login(identifier, password);
       setIsLoading(false);
 
+      if (!localRes.success) {
+        setErrorMessage(cloudRes.error || localRes.error || 'Invalid Email/User ID or Password');
+      } else if (localRes.user) {
+        onLoginSuccess(localRes.user);
+      }
+    } catch (err: any) {
+      // Fallback
+      const res = GSTStorage.login(identifier, password);
+      setIsLoading(false);
       if (!res.success) {
         setErrorMessage(res.error || 'Invalid Email/User ID or Password');
       } else if (res.user) {
         onLoginSuccess(res.user);
       }
-    }, 450);
+    }
   };
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
 
@@ -83,7 +103,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
 
@@ -98,6 +118,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
 
     if (forgotSuccess) {
+      // Update in cloud and local simultaneously
+      await CloudService.resetPassword(forgotSuccess.email, newPassword);
       const res = GSTStorage.resetPassword(forgotSuccess.email, newPassword);
       if (res.success) {
         setResetSuccessMessage('Password reset successfully! You can now log in with your new password.');

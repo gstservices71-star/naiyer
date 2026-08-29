@@ -10,6 +10,7 @@ import {
   WorkStatus,
 } from './types';
 import { GSTStorage } from './utils/storage';
+import { CloudService, subscribeToDatabase } from './utils/cloudService';
 import { Navbar } from './components/Navbar';
 import { Sidebar, TabType } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
@@ -66,7 +67,7 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Initial Load from local persistence
+  // Initial Load from local persistence + Cloud Firestore Sync
   useEffect(() => {
     const loadedUsers = GSTStorage.getUsers();
     const loadedClients = GSTStorage.getClients();
@@ -89,6 +90,22 @@ export default function App() {
     setActivityLogs(loadedLogs);
     setSettings(loadedSettings);
     setCurrentUser(loadedCurUser);
+
+    // Initialize Cloud Connection
+    CloudService.initDatabase();
+
+    // Subscribe to cross-device sync
+    const unsubscribe = subscribeToDatabase(() => {
+      const cloudU = CloudService.getCachedUsers();
+      if (cloudU && cloudU.length > 0) {
+        setUsers(cloudU);
+        GSTStorage.saveUsers(cloudU);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Handlers for Login & Session
@@ -203,45 +220,55 @@ export default function App() {
     return res;
   };
 
-  const handleAddUser = (
+  const handleAddUser = async (
     userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { confirmPassword?: string }
   ) => {
-    const res = GSTStorage.addUser(userData);
-    if (res.success) {
-      setUsers(GSTStorage.getUsers());
-      setActivityLogs(GSTStorage.getActivityLogs());
-      showToast(`User account for ${userData.name} created!`);
+    const cloudRes = await CloudService.registerOrAddUser(userData);
+    if (!cloudRes.success) {
+      return cloudRes;
     }
-    return res;
+    const res = GSTStorage.addUser(userData);
+    const updatedUsers = await CloudService.getUsers();
+    setUsers(updatedUsers);
+    setActivityLogs(GSTStorage.getActivityLogs());
+    showToast(`User account for ${userData.name} created!`);
+    return { success: true };
   };
 
-  const handleUpdateUser = (
+  const handleUpdateUser = async (
     id: number,
     userData: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>> & { newPassword?: string }
   ) => {
-    const res = GSTStorage.updateUser(id, userData);
-    if (res.success) {
-      setUsers(GSTStorage.getUsers());
-      setActivityLogs(GSTStorage.getActivityLogs());
-      showToast('User details updated successfully!');
+    const cloudRes = await CloudService.updateUser(id, userData);
+    if (!cloudRes.success) {
+      return cloudRes;
     }
-    return res;
+    const res = GSTStorage.updateUser(id, userData);
+    const updatedUsers = await CloudService.getUsers();
+    setUsers(updatedUsers);
+    setActivityLogs(GSTStorage.getActivityLogs());
+    showToast('User details updated successfully!');
+    return { success: true };
   };
 
-  const handleToggleUserStatus = (id: number) => {
+  const handleToggleUserStatus = async (id: number) => {
+    await CloudService.toggleUserStatus(id);
     const res = GSTStorage.toggleUserStatus(id);
     if (res.success) {
-      setUsers(GSTStorage.getUsers());
+      const updatedUsers = await CloudService.getUsers();
+      setUsers(updatedUsers);
       setActivityLogs(GSTStorage.getActivityLogs());
       showToast(`User status updated to ${res.newStatus?.toUpperCase()}`);
     }
     return res;
   };
 
-  const handleDeleteUser = (id: number) => {
+  const handleDeleteUser = async (id: number) => {
+    await CloudService.deleteUser(id);
     const res = GSTStorage.deleteUser(id);
     if (res.success) {
-      setUsers(GSTStorage.getUsers());
+      const updatedUsers = await CloudService.getUsers();
+      setUsers(updatedUsers);
       setClients(GSTStorage.getClients());
       setActivityLogs(GSTStorage.getActivityLogs());
       showToast('User deleted successfully.');
@@ -249,12 +276,14 @@ export default function App() {
     return res;
   };
 
-  const handleResetUserPassword = (id: number, newPass: string) => {
+  const handleResetUserPassword = async (id: number, newPass: string) => {
     const target = users.find((u) => u.id === id);
     if (!target) return { success: false, error: 'User not found' };
+    await CloudService.resetPassword(target.username, newPass);
     const res = GSTStorage.resetPassword(target.username, newPass);
     if (res.success) {
-      setUsers(GSTStorage.getUsers());
+      const updatedUsers = await CloudService.getUsers();
+      setUsers(updatedUsers);
       setActivityLogs(GSTStorage.getActivityLogs());
       showToast(`Password reset for ${target.name}`);
     }

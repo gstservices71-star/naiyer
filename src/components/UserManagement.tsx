@@ -25,17 +25,17 @@ interface UserManagementProps {
   users: User[];
   clients: Client[];
   currentUser: User;
-  onAddUser: (userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { confirmPassword?: string }) => {
+  onAddUser: (userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { confirmPassword?: string }) => Promise<{
     success: boolean;
     error?: string;
-  };
+  }> | { success: boolean; error?: string };
   onUpdateUser: (
     id: number,
     userData: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>> & { newPassword?: string }
-  ) => { success: boolean; error?: string };
-  onToggleStatus: (id: number) => { success: boolean; error?: string; newStatus?: 'active' | 'inactive' };
-  onDeleteUser: (id: number) => { success: boolean; error?: string };
-  onResetPassword: (id: number, newPass: string) => { success: boolean; error?: string };
+  ) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
+  onToggleStatus: (id: number) => Promise<{ success: boolean; error?: string; newStatus?: 'active' | 'inactive' }> | { success: boolean; error?: string; newStatus?: 'active' | 'inactive' };
+  onDeleteUser: (id: number) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
+  onResetPassword: (id: number, newPass: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
 }
 
 export const UserManagement: React.FC<UserManagementProps> = ({
@@ -88,7 +88,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   const [formSuccess, setFormSuccess] = useState('');
 
   // Handle Create User
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -118,7 +118,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       return;
     }
 
-    const res = onAddUser({
+    const res = await onAddUser({
       name: createFormData.name.trim(),
       email: createFormData.email.trim(),
       mobile: createFormData.mobile.trim(),
@@ -163,7 +163,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   // Handle Edit Submit
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     setFormError('');
@@ -178,7 +178,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       return;
     }
 
-    const res = onUpdateUser(editingUser.id, {
+    const res = await onUpdateUser(editingUser.id, {
       name: editFormData.name.trim(),
       email: editFormData.email.trim(),
       mobile: editFormData.mobile.trim(),
@@ -198,7 +198,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   // Handle Admin Reset Password Submit
-  const handleAdminResetPasswordSubmit = (e: React.FormEvent) => {
+  const handleAdminResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToResetPass) return;
     setFormError('');
@@ -213,7 +213,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       return;
     }
 
-    const res = onResetPassword(userToResetPass.id, adminNewPassword);
+    const res = await onResetPassword(userToResetPass.id, adminNewPassword);
     if (!res.success) {
       setFormError(res.error || 'Failed to reset password.');
     } else {
@@ -226,9 +226,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   // Handle Delete Confirmation
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!userToDelete) return;
-    const res = onDeleteUser(userToDelete.id);
+    const res = await onDeleteUser(userToDelete.id);
     if (!res.success) {
       setFormError(res.error || 'Failed to delete user.');
     } else {

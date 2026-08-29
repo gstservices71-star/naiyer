@@ -5,7 +5,7 @@ import { UserCog, Plus, ShieldCheck, UserCheck, Mail, Phone, Lock, Check } from 
 interface StaffManagementProps {
   users: User[];
   clients: Client[];
-  onAddUser: (userData: Omit<User, 'id' | 'created_at' | 'updated_at'>) => { success: boolean; error?: string };
+  onAddUser: (userData: Omit<User, 'id' | 'created_at' | 'updated_at'>) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
 }
 
 export const StaffManagement: React.FC<StaffManagementProps> = ({ users, clients, onAddUser }) => {
@@ -22,7 +22,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({ users, clients
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
@@ -32,7 +32,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({ users, clients
       return;
     }
 
-    const res = onAddUser(formData);
+    const res = await onAddUser(formData);
     if (!res.success) {
       setErrorMessage(res.error || 'Failed to create user.');
     } else {
