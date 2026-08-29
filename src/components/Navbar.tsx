@@ -58,12 +58,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <div className="font-bold text-slate-900 leading-tight text-sm md:text-base">
+              <div className="font-extrabold text-slate-950 tracking-tight text-base sm:text-lg leading-tight">
                 {companyName}
               </div>
-              <div className="text-[10px] sm:text-[11px] text-slate-600 font-mono flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
-                <span className="font-medium text-slate-700">📱 Mobile 1: 9876543210</span>
-                <span className="font-medium text-slate-700">📱 Mobile 2: 9823456781</span>
+              <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5 mt-0.5">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span>GST Client & Monthly Work Portal</span>
               </div>
             </div>
           </div>
