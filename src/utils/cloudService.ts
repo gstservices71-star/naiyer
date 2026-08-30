@@ -23,6 +23,7 @@ import {
   BankStatementBackup,
   ClientGstTurnover,
   UserSession,
+  OfficeVisit,
 } from '../types';
 import {
   initialActivityLogs,
@@ -39,6 +40,7 @@ import {
   initialBankStatementBackups,
 } from '../data/initialBankData';
 import { initialGstTurnover } from '../data/initialGstData';
+import { initialOfficeVisits } from '../data/initialVisitsData';
 import { hashPassword, verifyPassword } from './authCrypto';
 import { getISTTimestamp, sanitizeAuditValues } from './storage';
 
@@ -56,6 +58,7 @@ const COLLECTIONS = {
   BANK_STATEMENTS: 'portal_bank_statements',
   GST_TURNOVER: 'portal_gst_turnover',
   SESSIONS: 'portal_sessions',
+  OFFICE_VISITS: 'portal_office_visits',
 };
 
 // In-Memory Synchronized Cloud Cache
@@ -70,6 +73,7 @@ let cloudBankAccounts: ClientBankAccount[] = [...initialBankAccounts];
 let cloudBankTurnover: ClientBankTurnover[] = [...initialBankTurnover];
 let cloudBankStatements: BankStatementBackup[] = [...initialBankStatementBackups];
 let cloudGstTurnover: ClientGstTurnover[] = [...initialGstTurnover];
+let cloudOfficeVisits: OfficeVisit[] = [...initialOfficeVisits];
 let cloudSessions: UserSession[] = [];
 let isCloudInitialized = false;
 
@@ -191,6 +195,18 @@ export class CloudService {
           const list: ClientGstTurnover[] = [];
           snap.forEach((d) => list.push(d.data() as ClientGstTurnover));
           cloudGstTurnover = list;
+          notifySubscribers();
+        }
+      });
+
+      // Realtime Snapshots for Office Visits
+      onSnapshot(collection(db, COLLECTIONS.OFFICE_VISITS), (snap) => {
+        if (!snap.empty) {
+          const list: OfficeVisit[] = [];
+          snap.forEach((d) => list.push(d.data() as OfficeVisit));
+          // Sort newest first
+          list.sort((a, b) => b.id - a.id);
+          cloudOfficeVisits = list;
           notifySubscribers();
         }
       });
@@ -438,4 +454,54 @@ export class CloudService {
       return { success: false, error: err.message || 'Failed to toggle status.' };
     }
   }
+
+  // ==========================================
+  // OFFICE VISITS CLOUD PERSISTENCE
+  // ==========================================
+
+  static async getOfficeVisits(): Promise<OfficeVisit[]> {
+    try {
+      const snap = await getDocs(collection(db, COLLECTIONS.OFFICE_VISITS));
+      if (!snap.empty) {
+        const list: OfficeVisit[] = [];
+        snap.forEach((d) => list.push(d.data() as OfficeVisit));
+        list.sort((a, b) => b.id - a.id);
+        cloudOfficeVisits = list;
+        return list;
+      }
+    } catch {
+      // Return memory cache
+    }
+    return cloudOfficeVisits;
+  }
+
+  static getCachedOfficeVisits(): OfficeVisit[] {
+    return cloudOfficeVisits;
+  }
+
+  static async syncOfficeVisitToCloud(visit: OfficeVisit): Promise<void> {
+    try {
+      await setDoc(doc(db, COLLECTIONS.OFFICE_VISITS, String(visit.id)), visit);
+      const idx = cloudOfficeVisits.findIndex((v) => v.id === visit.id);
+      if (idx !== -1) {
+        cloudOfficeVisits[idx] = visit;
+      } else {
+        cloudOfficeVisits.unshift(visit);
+      }
+      notifySubscribers();
+    } catch (err) {
+      console.warn('Could not sync office visit to cloud:', err);
+    }
+  }
+
+  static async deleteOfficeVisitFromCloud(id: number): Promise<void> {
+    try {
+      await deleteDoc(doc(db, COLLECTIONS.OFFICE_VISITS, String(id)));
+      cloudOfficeVisits = cloudOfficeVisits.filter((v) => v.id !== id);
+      notifySubscribers();
+    } catch (err) {
+      console.warn('Could not delete office visit from cloud:', err);
+    }
+  }
 }
+

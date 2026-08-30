@@ -310,3 +310,64 @@ export interface FinancialReportData {
   totalBankTurnover: number;
 }
 
+// ==========================================
+// OFFICE CLIENT ENTRY / VISIT REGISTER TYPES
+// ==========================================
+export type OfficeVisitStatus = 'IN' | 'OUT';
+export type VisitorType = 'registered' | 'new';
+
+export interface OfficeVisitNote {
+  id: string;
+  note: string;
+  action_type: 'entry_in' | 'note_added' | 'marked_out' | 'details_updated';
+  staff_id: number;
+  staff_name: string;
+  timestamp: string; // YYYY-MM-DD HH:mm:ss
+}
+
+export interface OfficeVisit {
+  id: number;
+  visitor_type: VisitorType;
+  client_id: number | null; // null if new visitor
+  client_name: string;      // Contact / Visitor Person Name
+  firm_name: string;        // Firm / Business Name
+  gst_number: string;       // GSTIN or 'N/A'
+  file_number: string;      // Physical File / Folder / Ledger No.
+  mobile: string;           // Primary Mobile
+  alternate_mobile?: string;
+  client_type: string;      // 'Normal' | 'Composition' | 'QRMP' | 'Non-Registered' | 'Other'
+  purpose: string;          // Main reason / service for visit
+  current_remark: string;   // Latest active remark / running note
+  visit_date: string;       // YYYY-MM-DD (e.g. 2026-08-30)
+  financial_year_id: number;// FY Id
+  financial_year_name?: string; // e.g. "2026-27"
+  month: string;            // e.g. "August"
+  in_time: string;          // e.g. "10:30 AM"
+  out_time: string | null;  // e.g. "11:45 AM" or null if still in office
+  status: OfficeVisitStatus;// 'IN' | 'OUT'
+  entry_by_id: number;
+  entry_by_name: string;
+  out_marked_by_id: number | null;
+  out_marked_by_name: string | null;
+  remarks_log: OfficeVisitNote[];
+  created_at: string;
+  updated_at: string;
+  updated_by_id: number;
+  updated_by_name: string;
+}
+
+export const VISIT_PURPOSES = [
+  'GST Return Filing / Discussion',
+  'New GST Registration',
+  'GST Notice / Assessment / Hearing',
+  'Income Tax Return (ITR)',
+  'Bank / Turnover Statement Discussion',
+  'Document Submission / Collection',
+  'Tax & Bill Payment / Challan',
+  'Accounting & Bookkeeping Work',
+  'Annual Audit & Balance Sheet',
+  'General Consultation / Meeting',
+  'Other Office Service',
+] as const;
+
+

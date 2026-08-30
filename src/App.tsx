@@ -5,6 +5,7 @@ import {
   Client,
   FinancialYear,
   MonthlyWork as MonthlyWorkType,
+  OfficeVisit,
   User,
   WorkHistory,
   WorkStatus,
@@ -28,6 +29,7 @@ import { ClientFormModal } from './components/ClientFormModal';
 import { ClientProfileModal } from './components/ClientProfileModal';
 import { CsvImportModal } from './components/CsvImportModal';
 import { BankTurnover } from './components/BankTurnover';
+import { OfficeVisits } from './components/OfficeVisits/OfficeVisits';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, AlertCircle, Info, ShieldAlert, ArrowLeft } from 'lucide-react';
 
@@ -43,6 +45,7 @@ export default function App() {
   const [workHistory, setWorkHistory] = useState<WorkHistory[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [officeVisits, setOfficeVisits] = useState<OfficeVisit[]>([]);
 
   // UI State
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -79,6 +82,7 @@ export default function App() {
     const loadedCurUser = GSTStorage.getCurrentUser();
     const loadedFY = GSTStorage.getSelectedFY();
     const loadedMonth = GSTStorage.getSelectedMonth();
+    const loadedVisits = GSTStorage.getOfficeVisits();
 
     setUsers(loadedUsers);
     setClients(loadedClients);
@@ -90,6 +94,7 @@ export default function App() {
     setActivityLogs(loadedLogs);
     setSettings(loadedSettings);
     setCurrentUser(loadedCurUser);
+    setOfficeVisits(loadedVisits);
 
     // Initialize Cloud Connection
     CloudService.initDatabase();
@@ -100,6 +105,11 @@ export default function App() {
       if (cloudU && cloudU.length > 0) {
         setUsers(cloudU);
         GSTStorage.saveUsers(cloudU);
+      }
+      const cloudVisits = CloudService.getCachedOfficeVisits();
+      if (cloudVisits && cloudVisits.length > 0) {
+        setOfficeVisits(cloudVisits);
+        GSTStorage.saveOfficeVisits(cloudVisits);
       }
     });
 
@@ -405,7 +415,73 @@ export default function App() {
     setActivityLogs(GSTStorage.getActivityLogs());
     setSettings(GSTStorage.getSettings());
     setCurrentUser(GSTStorage.getCurrentUser());
+    setOfficeVisits(GSTStorage.getOfficeVisits());
     showToast('Database successfully restored to clean seed data.');
+  };
+
+  // Office Visits Handlers
+  const handleAddOfficeVisit = (
+    data: Omit<
+      OfficeVisit,
+      'id' | 'created_at' | 'updated_at' | 'updated_by_id' | 'updated_by_name' | 'remarks_log'
+    > & { initial_note?: string }
+  ) => {
+    const res = GSTStorage.addOfficeVisit(data);
+    if (res.success && res.visit) {
+      setOfficeVisits(GSTStorage.getOfficeVisits());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast(`Visitor "${res.visit.firm_name || res.visit.client_name}" marked IN successfully!`);
+    }
+    return res;
+  };
+
+  const handleUpdateOfficeVisit = (
+    id: number,
+    data: Partial<Omit<OfficeVisit, 'id' | 'created_at' | 'remarks_log'>> & { new_note?: string }
+  ) => {
+    const res = GSTStorage.updateOfficeVisit(id, data);
+    if (res.success && res.visit) {
+      setOfficeVisits(GSTStorage.getOfficeVisits());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast('Visit record updated successfully!');
+    }
+    return res;
+  };
+
+  const handleMarkOfficeVisitOut = (id: number, outTime: string, outRemark?: string) => {
+    const res = GSTStorage.markVisitOut(id, outTime, outRemark);
+    if (res.success && res.visit) {
+      setOfficeVisits(GSTStorage.getOfficeVisits());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast(`Visitor "${res.visit.firm_name || res.visit.client_name}" marked OUT at ${outTime}.`);
+    }
+  };
+
+  const handleAddOfficeVisitNote = (id: number, noteText: string) => {
+    const res = GSTStorage.addVisitNote(id, noteText);
+    if (res.success) {
+      setOfficeVisits(GSTStorage.getOfficeVisits());
+      showToast('Running note added to visit timeline.');
+    }
+  };
+
+  const handleDeleteOfficeVisit = (id: number) => {
+    const res = GSTStorage.deleteOfficeVisit(id);
+    if (res.success) {
+      setOfficeVisits(GSTStorage.getOfficeVisits());
+      setActivityLogs(GSTStorage.getActivityLogs());
+      showToast('Visit record deleted.');
+    }
+  };
+
+  const handleRefreshPortal = () => {
+    const freshVisits = GSTStorage.getOfficeVisits();
+    const freshClients = GSTStorage.getClients();
+    const freshWork = GSTStorage.getMonthlyWork();
+    setOfficeVisits(freshVisits);
+    setClients(freshClients);
+    setMonthlyWork(freshWork);
+    showToast('Portal data synced & refreshed!', 'info');
   };
 
   // Pending count for sidebar badge
@@ -421,6 +497,8 @@ export default function App() {
       const st = rec ? rec.status : 'Not Started';
       return st !== 'Completed';
     }).length;
+
+  const inVisitsCount = officeVisits.filter((v) => v.status === 'IN').length;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
@@ -480,6 +558,7 @@ export default function App() {
           onLogout={handleLogout}
           clientCount={clients.length}
           pendingCount={pendingCount}
+          inVisitsCount={inVisitsCount}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
         />
@@ -558,6 +637,31 @@ export default function App() {
                 setSelectedBankClientId(clientId);
                 setActiveTab('bank-turnover');
               }}
+            />
+          )}
+
+          {activeTab === 'office-visits' && (
+            <OfficeVisits
+              visits={officeVisits}
+              clients={clients}
+              financialYears={financialYears}
+              selectedFY={selectedFY}
+              onSelectFY={handleSelectFY}
+              selectedMonth={selectedMonth}
+              onSelectMonth={handleSelectMonth}
+              users={users}
+              currentUser={currentUser}
+              settings={settings}
+              onAddVisit={handleAddOfficeVisit}
+              onUpdateVisit={handleUpdateOfficeVisit}
+              onMarkVisitOut={handleMarkOfficeVisitOut}
+              onAddVisitNote={handleAddOfficeVisitNote}
+              onDeleteVisit={handleDeleteOfficeVisit}
+              onOpenAddClientWithData={(prefillData) => {
+                setEditingClient(null);
+                setIsAddClientModalOpen(true);
+              }}
+              onRefreshData={handleRefreshPortal}
             />
           )}
 

@@ -15,6 +15,10 @@ import {
   FY_MONTHS,
   FinancialReportData,
   UserSession,
+  OfficeVisit,
+  OfficeVisitNote,
+  OfficeVisitStatus,
+  VisitorType,
 } from '../types';
 import {
   initialActivityLogs,
@@ -31,6 +35,7 @@ import {
   initialBankStatementBackups,
 } from '../data/initialBankData';
 import { initialGstTurnover } from '../data/initialGstData';
+import { initialOfficeVisits } from '../data/initialVisitsData';
 import { validateGSTIN } from './gstValidation';
 
 export function getISTTimestamp(date: Date = new Date()): string {
@@ -82,6 +87,7 @@ const STORAGE_KEYS = {
   GST_TURNOVER: 'gst_app_gst_turnover_v1',
   SESSIONS: 'gst_app_sessions_v1',
   CURRENT_SESSION_ID: 'gst_app_current_session_id',
+  OFFICE_VISITS: 'gst_app_office_visits_v1',
 };
 
 // Resilient In-Memory Storage Fallback for restricted / private iframe environments
@@ -1556,6 +1562,260 @@ export class GSTStorage {
     };
   }
 
+  // ==========================================
+  // OFFICE CLIENT ENTRY / VISIT REGISTER
+  // ==========================================
+
+  static getOfficeVisits(): OfficeVisit[] {
+    const raw = safeGetItem(STORAGE_KEYS.OFFICE_VISITS);
+    if (!raw) {
+      this.saveOfficeVisits(initialOfficeVisits);
+      return initialOfficeVisits;
+    }
+    return safeParse<OfficeVisit[]>(raw, initialOfficeVisits);
+  }
+
+  static saveOfficeVisits(visits: OfficeVisit[]) {
+    safeSetItem(STORAGE_KEYS.OFFICE_VISITS, JSON.stringify(visits));
+  }
+
+  static getOfficeVisitById(id: number): OfficeVisit | undefined {
+    return this.getOfficeVisits().find((v) => v.id === id);
+  }
+
+  static getVisitsByClientId(clientId: number): OfficeVisit[] {
+    return this.getOfficeVisits().filter((v) => v.client_id === clientId);
+  }
+
+  static getVisitsByMobile(mobile: string): OfficeVisit[] {
+    const cleanMobile = mobile.replace(/\D/g, '');
+    if (!cleanMobile) return [];
+    return this.getOfficeVisits().filter(
+      (v) => v.mobile.replace(/\D/g, '') === cleanMobile
+    );
+  }
+
+  static addOfficeVisit(
+    data: Omit<OfficeVisit, 'id' | 'created_at' | 'updated_at' | 'updated_by_id' | 'updated_by_name' | 'remarks_log'> & {
+      initial_note?: string;
+    }
+  ): { success: boolean; visit?: OfficeVisit; error?: string } {
+    const visits = this.getOfficeVisits();
+    const now = getISTTimestamp();
+    const currentUser = this.getCurrentUser();
+
+    const newId = Date.now();
+    const entryByName = currentUser?.name || data.entry_by_name || 'Staff User';
+    const entryById = currentUser?.id || data.entry_by_id || 1;
+
+    const initialLog: OfficeVisitNote[] = [
+      {
+        id: `note-${newId}-init`,
+        note: data.initial_note?.trim() || data.current_remark?.trim() || `Marked IN for ${data.purpose}`,
+        action_type: 'entry_in',
+        staff_id: entryById,
+        staff_name: entryByName,
+        timestamp: now,
+      },
+    ];
+
+    const newVisit: OfficeVisit = {
+      ...data,
+      id: newId,
+      status: 'IN',
+      entry_by_id: entryById,
+      entry_by_name: entryByName,
+      out_marked_by_id: null,
+      out_marked_by_name: null,
+      out_time: null,
+      current_remark: data.current_remark?.trim() || (data.initial_note?.trim() ?? ''),
+      remarks_log: initialLog,
+      created_at: now,
+      updated_at: now,
+      updated_by_id: entryById,
+      updated_by_name: entryByName,
+    };
+
+    visits.unshift(newVisit);
+    this.saveOfficeVisits(visits);
+
+    // Audit log
+    this.logActivity(
+      'CREATE_OFFICE_VISIT',
+      `Visitor marked IN: ${newVisit.firm_name || newVisit.client_name} (${newVisit.visitor_type.toUpperCase()}) for "${newVisit.purpose}" at ${newVisit.in_time}`,
+      {
+        module: 'Office Client Entry',
+        clientId: newVisit.client_id || undefined,
+        clientName: newVisit.client_name || undefined,
+        firmName: newVisit.firm_name || undefined,
+        recordId: newVisit.id,
+        newValues: sanitizeAuditValues(newVisit),
+      }
+    );
+
+    return { success: true, visit: newVisit };
+  }
+
+  static updateOfficeVisit(
+    id: number,
+    data: Partial<Omit<OfficeVisit, 'id' | 'created_at' | 'remarks_log'>> & {
+      new_note?: string;
+    }
+  ): { success: boolean; visit?: OfficeVisit; error?: string } {
+    const visits = this.getOfficeVisits();
+    const idx = visits.findIndex((v) => v.id === id);
+    if (idx === -1) {
+      return { success: false, error: 'Visit record not found' };
+    }
+
+    const existing = visits[idx];
+    const now = getISTTimestamp();
+    const currentUser = this.getCurrentUser();
+    const staffName = currentUser?.name || 'Staff User';
+    const staffId = currentUser?.id || 1;
+
+    const updatedNotes = [...existing.remarks_log];
+
+    if (data.new_note && data.new_note.trim()) {
+      updatedNotes.push({
+        id: `note-${id}-${Date.now()}`,
+        note: data.new_note.trim(),
+        action_type: 'note_added',
+        staff_id: staffId,
+        staff_name: staffName,
+        timestamp: now,
+      });
+    }
+
+    const updatedVisit: OfficeVisit = {
+      ...existing,
+      ...data,
+      current_remark: data.current_remark ?? (data.new_note ? data.new_note.trim() : existing.current_remark),
+      remarks_log: updatedNotes,
+      updated_at: now,
+      updated_by_id: staffId,
+      updated_by_name: staffName,
+    };
+
+    visits[idx] = updatedVisit;
+    this.saveOfficeVisits(visits);
+
+    // Audit log
+    this.logActivity(
+      'UPDATE_OFFICE_VISIT',
+      `Updated office visit record for ${updatedVisit.firm_name || updatedVisit.client_name}`,
+      {
+        module: 'Office Client Entry',
+        clientId: updatedVisit.client_id || undefined,
+        clientName: updatedVisit.client_name || undefined,
+        firmName: updatedVisit.firm_name || undefined,
+        recordId: id,
+        oldValues: sanitizeAuditValues(existing),
+        newValues: sanitizeAuditValues(updatedVisit),
+      }
+    );
+
+    return { success: true, visit: updatedVisit };
+  }
+
+  static markVisitOut(
+    id: number,
+    outTime: string,
+    outRemark?: string
+  ): { success: boolean; visit?: OfficeVisit; error?: string } {
+    const visits = this.getOfficeVisits();
+    const idx = visits.findIndex((v) => v.id === id);
+    if (idx === -1) {
+      return { success: false, error: 'Visit record not found' };
+    }
+
+    const existing = visits[idx];
+    const now = getISTTimestamp();
+    const currentUser = this.getCurrentUser();
+    const staffName = currentUser?.name || 'Staff User';
+    const staffId = currentUser?.id || 1;
+
+    const updatedNotes = [...existing.remarks_log];
+    const exitNote = outRemark?.trim()
+      ? `Client marked OUT at ${outTime}. Note: ${outRemark.trim()}`
+      : `Client marked OUT from office at ${outTime}.`;
+
+    updatedNotes.push({
+      id: `note-${id}-out-${Date.now()}`,
+      note: exitNote,
+      action_type: 'marked_out',
+      staff_id: staffId,
+      staff_name: staffName,
+      timestamp: now,
+    });
+
+    const updatedVisit: OfficeVisit = {
+      ...existing,
+      status: 'OUT',
+      out_time: outTime,
+      out_marked_by_id: staffId,
+      out_marked_by_name: staffName,
+      current_remark: outRemark?.trim() || existing.current_remark,
+      remarks_log: updatedNotes,
+      updated_at: now,
+      updated_by_id: staffId,
+      updated_by_name: staffName,
+    };
+
+    visits[idx] = updatedVisit;
+    this.saveOfficeVisits(visits);
+
+    // Audit log
+    this.logActivity(
+      'MARK_OUT_OFFICE_VISIT',
+      `Visitor marked OUT: ${updatedVisit.firm_name || updatedVisit.client_name} at ${outTime} by ${staffName}`,
+      {
+        module: 'Office Client Entry',
+        clientId: updatedVisit.client_id || undefined,
+        clientName: updatedVisit.client_name || undefined,
+        firmName: updatedVisit.firm_name || undefined,
+        recordId: id,
+        oldValues: sanitizeAuditValues(existing),
+        newValues: sanitizeAuditValues(updatedVisit),
+      }
+    );
+
+    return { success: true, visit: updatedVisit };
+  }
+
+  static addVisitNote(
+    id: number,
+    noteText: string
+  ): { success: boolean; visit?: OfficeVisit; error?: string } {
+    if (!noteText.trim()) return { success: false, error: 'Note cannot be empty' };
+    return this.updateOfficeVisit(id, { new_note: noteText.trim() });
+  }
+
+  static deleteOfficeVisit(id: number): { success: boolean; error?: string } {
+    const visits = this.getOfficeVisits();
+    const existing = visits.find((v) => v.id === id);
+    if (!existing) return { success: false, error: 'Visit record not found' };
+
+    const filtered = visits.filter((v) => v.id !== id);
+    this.saveOfficeVisits(filtered);
+
+    // Audit log
+    this.logActivity(
+      'DELETE_OFFICE_VISIT',
+      `Deleted visit record for ${existing.firm_name || existing.client_name}`,
+      {
+        module: 'Office Client Entry',
+        clientId: existing.client_id || undefined,
+        clientName: existing.client_name || undefined,
+        firmName: existing.firm_name || undefined,
+        recordId: id,
+        oldValues: sanitizeAuditValues(existing),
+      }
+    );
+
+    return { success: true };
+  }
+
   static resetToDefaultSeed() {
     safeRemoveItem(STORAGE_KEYS.USERS);
     safeRemoveItem(STORAGE_KEYS.CLIENTS);
@@ -1571,5 +1831,6 @@ export class GSTStorage {
     safeRemoveItem(STORAGE_KEYS.BANK_TURNOVER);
     safeRemoveItem(STORAGE_KEYS.BANK_STATEMENTS);
     safeRemoveItem(STORAGE_KEYS.GST_TURNOVER);
+    safeRemoveItem(STORAGE_KEYS.OFFICE_VISITS);
   }
 }

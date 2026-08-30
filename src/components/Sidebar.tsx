@@ -16,11 +16,13 @@ import {
   LogOut,
   Landmark,
   ShieldCheck,
+  ClipboardList,
 } from 'lucide-react';
 
 export type TabType =
   | 'dashboard'
   | 'clients'
+  | 'office-visits'
   | 'monthly-work'
   | 'bank-turnover'
   | 'reports'
@@ -38,6 +40,7 @@ interface SidebarProps {
   onLogout: () => void;
   clientCount: number;
   pendingCount: number;
+  inVisitsCount?: number;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -49,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
   clientCount,
   pendingCount,
+  inVisitsCount = 0,
   isOpen,
   onClose,
 }) => {
@@ -57,6 +61,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard, badge: null },
     { id: 'clients' as TabType, label: 'Master Clients', icon: Users, badge: clientCount },
+    {
+      id: 'office-visits' as TabType,
+      label: 'Office Client Entry',
+      icon: ClipboardList,
+      badge: inVisitsCount > 0 ? `${inVisitsCount} IN` : 'Register',
+      badgeColor: inVisitsCount > 0 ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40' : 'bg-slate-700/80 text-slate-300',
+    },
     { id: 'monthly-work' as TabType, label: 'Monthly GST Work', icon: CalendarCheck2, badge: pendingCount > 0 ? `${pendingCount} pending` : null, badgeColor: 'bg-amber-100 text-amber-800' },
     { id: 'bank-turnover' as TabType, label: 'Bank Turnover', icon: Landmark, badge: '5 Banks', badgeColor: 'bg-indigo-500/20 text-indigo-300' },
     { id: 'reports' as TabType, label: 'Reports & PDF', icon: FileSpreadsheet, badge: 'PDF', badgeColor: 'bg-blue-500/20 text-blue-300' },
