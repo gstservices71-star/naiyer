@@ -108,6 +108,7 @@ export const generateClientReportPDF = (
       formatINRNumber(row.taxable),
       formatINRNumber(row.exempt),
       formatINRNumber(row.total),
+      row.remark || '—',
     ]);
 
     // Add Totals row
@@ -116,11 +117,12 @@ export const generateClientReportPDF = (
       formatINRNumber(data.gstTotals.taxable),
       formatINRNumber(data.gstTotals.exempt),
       formatINRNumber(data.gstTotals.total),
+      '—',
     ]);
 
     autoTable(doc, {
       startY: currentY,
-      head: [['Month', 'Taxable Turnover', 'Exempt Turnover', 'Total GST Turnover']],
+      head: [['Month', 'Taxable Turnover', 'Exempt Turnover', 'Total GST Turnover', 'Remark']],
       body: gstBody,
       theme: 'grid',
       headStyles: {
@@ -138,10 +140,11 @@ export const generateClientReportPDF = (
         lineWidth: 0.2,
       },
       columnStyles: {
-        0: { halign: 'left', fontStyle: 'bold', cellWidth: 35 },
+        0: { halign: 'left', fontStyle: 'bold', cellWidth: 28 },
         1: { halign: 'right' },
         2: { halign: 'right' },
         3: { halign: 'right', fontStyle: 'bold' },
+        4: { halign: 'left', fontSize: 7 },
       },
       didParseCell: (hookData) => {
         if (hookData.row.index === gstBody.length - 1) {
@@ -533,6 +536,7 @@ export const generateAllClientsReportPDF = (
       formatINRNumber(row.taxable),
       formatINRNumber(row.exempt),
       formatINRNumber(row.total),
+      row.remark || '—',
     ]);
 
     gstBody.push([
@@ -540,11 +544,12 @@ export const generateAllClientsReportPDF = (
       formatINRNumber(data.gstTotals.taxable),
       formatINRNumber(data.gstTotals.exempt),
       formatINRNumber(data.gstTotals.total),
+      '—',
     ]);
 
     autoTable(doc, {
       startY: clientY,
-      head: [['Month', 'Taxable Turnover', 'Exempt Turnover', 'Total GST Turnover']],
+      head: [['Month', 'Taxable Turnover', 'Exempt Turnover', 'Total GST Turnover', 'Remark']],
       body: gstBody,
       theme: 'grid',
       headStyles: {

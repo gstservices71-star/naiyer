@@ -19,7 +19,6 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
-  RotateCcw,
   Sparkles,
   ChevronLeft,
   ChevronRight,
@@ -74,16 +73,12 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
   const [staffFilter, setStaffFilter] = useState<string>('all');
   const [turnoverStatusFilter, setTurnoverStatusFilter] = useState<'all' | 'with-data' | 'no-data'>('all');
 
-  // 12-Month Input State for active client: { [month]: { taxable: string; exempt: string } }
+  // 12-Month Input State for active client: { [month]: { taxable: string; exempt: string; remark: string } }
   const [monthlyInputs, setMonthlyInputs] = useState<
-    Record<string, { taxable: string; exempt: string }>
+    Record<string, { taxable: string; exempt: string; remark: string }>
   >({});
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Quick Tools Modal / Popover state
-  const [isDistributeOpen, setIsDistributeOpen] = useState(false);
-  const [annualDistributeAmount, setAnnualDistributeAmount] = useState('');
 
   // All GST Turnover Records loaded from storage
   const [allGstTurnovers, setAllGstTurnovers] = useState<ClientGstTurnover[]>([]);
@@ -183,13 +178,14 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
     if (!activeClient) return;
 
     const turnovers = GSTStorage.getClientGstTurnover(activeClient.id, selectedFY.id);
-    const inputs: Record<string, { taxable: string; exempt: string }> = {};
+    const inputs: Record<string, { taxable: string; exempt: string; remark: string }> = {};
 
     FY_MONTHS.forEach((m) => {
       const record = turnovers.find((t) => t.month === m);
       inputs[m] = {
         taxable: record && record.taxable_turnover > 0 ? String(record.taxable_turnover) : '',
         exempt: record && record.exempt_turnover > 0 ? String(record.exempt_turnover) : '',
+        remark: record?.remark || '',
       };
     });
 
@@ -198,13 +194,14 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
   }, [activeClient?.id, selectedFY.id]);
 
   // Handle month field change
-  const handleInputChange = (month: string, field: 'taxable' | 'exempt', value: string) => {
-    // Only allow numbers and decimal
-    const cleanVal = value.replace(/[^0-9.]/g, '');
+  const handleInputChange = (month: string, field: 'taxable' | 'exempt' | 'remark', value: string) => {
+    const cleanVal = field === 'remark' ? value : value.replace(/[^0-9.]/g, '');
     setMonthlyInputs((prev) => ({
       ...prev,
       [month]: {
-        ...prev[month],
+        taxable: prev[month]?.taxable || '',
+        exempt: prev[month]?.exempt || '',
+        remark: prev[month]?.remark || '',
         [field]: cleanVal,
       },
     }));
@@ -220,6 +217,7 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
     const monthlyBreakdown = FY_MONTHS.map((month) => {
       const tax = parseFloat(monthlyInputs[month]?.taxable || '0') || 0;
       const ex = parseFloat(monthlyInputs[month]?.exempt || '0') || 0;
+      const rem = monthlyInputs[month]?.remark || '';
       const tot = tax + ex;
 
       totalTaxable += tax;
@@ -231,6 +229,7 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
         taxable: tax,
         exempt: ex,
         total: tot,
+        remark: rem,
       };
     });
 
@@ -259,12 +258,13 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
     if (!activeClient) return;
     setIsSaving(true);
 
-    const monthlyData: Record<string, { taxable: number; exempt: number }> = {};
+    const monthlyData: Record<string, { taxable: number; exempt: number; remark?: string }> = {};
 
     FY_MONTHS.forEach((m) => {
       const tax = parseFloat(monthlyInputs[m]?.taxable || '0') || 0;
       const ex = parseFloat(monthlyInputs[m]?.exempt || '0') || 0;
-      monthlyData[m] = { taxable: tax, exempt: ex };
+      const rem = monthlyInputs[m]?.remark?.trim() || '';
+      monthlyData[m] = { taxable: tax, exempt: ex, remark: rem };
     });
 
     GSTStorage.batchSaveClientGstTurnover(
@@ -303,7 +303,7 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
 
   // Quick Action: Copy to remaining months
   const handleCopyForward = (sourceMonth: string) => {
-    const src = monthlyInputs[sourceMonth] || { taxable: '', exempt: '' };
+    const src = monthlyInputs[sourceMonth] || { taxable: '', exempt: '', remark: '' };
     const srcIndex = FY_MONTHS.indexOf(sourceMonth as any);
     if (srcIndex === -1) return;
 
@@ -314,44 +314,12 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
         updated[m] = {
           taxable: src.taxable,
           exempt: src.exempt,
+          remark: src.remark,
         };
       }
       return updated;
     });
-    setSaveStatus('Values copied forward to remaining months. Click Save when done.');
-  };
-
-  // Quick Action: Distribute annual total equally across 12 months
-  const handleDistributeEqually = () => {
-    const total = parseFloat(annualDistributeAmount.replace(/[^0-9.]/g, '')) || 0;
-    if (total <= 0) return;
-
-    const monthlyShare = Math.round(total / 12);
-    const updated: Record<string, { taxable: string; exempt: string }> = {};
-
-    FY_MONTHS.forEach((m, idx) => {
-      // Balance out rounding on last month
-      const amount = idx === 11 ? total - (monthlyShare * 11) : monthlyShare;
-      updated[m] = {
-        taxable: String(amount),
-        exempt: '0',
-      };
-    });
-
-    setMonthlyInputs(updated);
-    setIsDistributeOpen(false);
-    setAnnualDistributeAmount('');
-    setSaveStatus(`₹${formatNumberOnly(total)} distributed equally across 12 months. Click Save when ready.`);
-  };
-
-  // Quick Action: Clear all fields
-  const handleClearAll = () => {
-    const cleared: Record<string, { taxable: string; exempt: string }> = {};
-    FY_MONTHS.forEach((m) => {
-      cleared[m] = { taxable: '', exempt: '' };
-    });
-    setMonthlyInputs(cleared);
-    setSaveStatus('Turnover fields cleared. Click Save to commit.');
+    setSaveStatus('Values and remarks copied forward to remaining months. Click Save when done.');
   };
 
   // Quick Navigation: Next & Previous Client
@@ -381,6 +349,7 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
         taxable: tax,
         exempt: ex,
         total: tax + ex,
+        remark: monthlyInputs[m]?.remark || '',
       };
     });
 
@@ -410,18 +379,21 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
       'Taxable Sales (Rs.)',
       'Exempt Sales (Rs.)',
       'Total Turnover (Rs.)',
+      'Monthly Remark (Apr-Mar)',
     ];
 
     const rows = FY_MONTHS.map((m) => {
       const tax = parseFloat(monthlyInputs[m]?.taxable || '0') || 0;
       const ex = parseFloat(monthlyInputs[m]?.exempt || '0') || 0;
       const tot = tax + ex;
+      const rem = (monthlyInputs[m]?.remark || '').replace(/"/g, '""');
       return [
         m,
         `"${selectedFY.display_name}"`,
         tax,
         ex,
         tot,
+        `"${rem}"`,
       ].join(',');
     });
 
@@ -432,6 +404,7 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
       activeClientCalculations.totalTaxable,
       activeClientCalculations.totalExempt,
       activeClientCalculations.grandTotal,
+      '""',
     ].join(','));
 
     const meta = [
@@ -1075,61 +1048,11 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
 
                 {/* Quick Helper Tools & Save Action Bar */}
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-slate-500 mr-1">Quick Tools:</span>
-
-                    {/* Equal Distribute Button */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsDistributeOpen(!isDistributeOpen)}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
-                      >
-                        <Sparkles className="w-3 h-3 text-amber-600" />
-                        <span>Equal 12M Split</span>
-                      </button>
-
-                      {isDistributeOpen && (
-                        <div className="absolute left-0 top-full mt-2 w-64 bg-white p-3 rounded-xl shadow-xl border border-slate-200 z-20 space-y-2">
-                          <div className="text-xs font-bold text-slate-900">
-                            Distribute Annual Turnover
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Enter annual amount (e.g. 1200000)"
-                            value={annualDistributeAmount}
-                            onChange={(e) => setAnnualDistributeAmount(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono"
-                          />
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setIsDistributeOpen(false)}
-                              className="px-2 py-1 text-xs text-slate-500 hover:text-slate-700"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleDistributeEqually}
-                              className="px-2.5 py-1 text-xs font-bold bg-[#78350F] text-white rounded-lg"
-                            >
-                              Apply
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Clear Button */}
-                    <button
-                      type="button"
-                      onClick={handleClearAll}
-                      className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>Clear All</span>
-                    </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <FileSpreadsheet className="w-4 h-4 text-[#78350F]" />
+                      <span>12-Month Turnover & Remark Entry (April to March)</span>
+                    </span>
                   </div>
 
                   {/* Save Status / Feedback */}
@@ -1170,18 +1093,20 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
                     <table className="w-full text-left text-xs text-slate-700">
                       <thead className="bg-[#FAF6F0] border-b border-[#E8DCC4] text-[11px] font-bold text-[#78350F] uppercase tracking-wider">
                         <tr>
-                          <th className="px-4 py-3 w-40">Month (FY {selectedFY.display_name})</th>
-                          <th className="px-4 py-3 min-w-[200px]">Taxable Sales (₹)</th>
-                          <th className="px-4 py-3 min-w-[200px]">Exempt Sales (₹)</th>
-                          <th className="px-4 py-3 min-w-[170px] text-right">Total Turnover (₹)</th>
-                          <th className="px-4 py-3 w-28 text-right">% Share</th>
-                          <th className="px-3 py-3 w-28 text-center">Quick Action</th>
+                          <th className="px-4 py-3 w-36">Month (FY {selectedFY.display_name})</th>
+                          <th className="px-4 py-3 min-w-[180px]">Taxable Sales (₹)</th>
+                          <th className="px-4 py-3 min-w-[180px]">Exempt Sales (₹)</th>
+                          <th className="px-4 py-3 min-w-[150px] text-right">Total Turnover (₹)</th>
+                          <th className="px-4 py-3 w-24 text-right">% Share</th>
+                          <th className="px-3 py-3 min-w-[220px]">Monthly Remark (Apr - Mar)</th>
+                          <th className="px-3 py-3 w-24 text-center">Quick Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {FY_MONTHS.map((month, idx) => {
                           const taxStr = monthlyInputs[month]?.taxable || '';
                           const exStr = monthlyInputs[month]?.exempt || '';
+                          const remStr = monthlyInputs[month]?.remark || '';
                           const taxNum = parseFloat(taxStr) || 0;
                           const exNum = parseFloat(exStr) || 0;
                           const monthTotal = taxNum + exNum;
@@ -1273,12 +1198,24 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
                                   </span>
                                 </td>
 
+                                {/* Monthly Remark (April to March) */}
+                                <td className="px-3 py-2.5">
+                                  <input
+                                    type="text"
+                                    id={`input-remark-${month}`}
+                                    placeholder="Enter remark (e.g. Nil, Regular, Revised...)"
+                                    value={remStr}
+                                    onChange={(e) => handleInputChange(month, 'remark', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-[#78350F] focus:ring-1 focus:ring-[#78350F] rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition-all"
+                                  />
+                                </td>
+
                                 {/* Copy Forward Action */}
                                 <td className="px-3 py-3 text-center">
                                   <button
                                     type="button"
                                     onClick={() => handleCopyForward(month)}
-                                    title="Copy this month's taxable & exempt values to all following months"
+                                    title="Copy this month's taxable, exempt & remark to all following months"
                                     className="text-[10px] font-bold text-slate-500 hover:text-[#78350F] hover:bg-amber-50 px-2 py-1 rounded border border-transparent hover:border-amber-200 transition-colors cursor-pointer"
                                   >
                                     Copy ↓
@@ -1301,7 +1238,7 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
                                     {isQ3End && formatINR(activeClientCalculations.quarters.q3)}
                                     {isQ4End && formatINR(activeClientCalculations.quarters.q4)}
                                   </td>
-                                  <td colSpan={2} className="px-4 py-1.5 text-slate-400 text-right text-[10px]">
+                                  <td colSpan={3} className="px-4 py-1.5 text-slate-400 text-right text-[10px]">
                                     Quarterly Subtotal
                                   </td>
                                 </tr>
@@ -1325,6 +1262,9 @@ export const GstTurnoverEntry: React.FC<GstTurnoverEntryProps> = ({
                             {formatINR(activeClientCalculations.grandTotal)}
                           </td>
                           <td className="px-4 py-3.5 text-right font-mono text-white">100.0%</td>
+                          <td className="px-3 py-3.5 text-slate-400 text-xs italic">
+                            {activeClientCalculations.filledMonthsCount} / 12 Months Recorded
+                          </td>
                           <td className="px-3 py-3.5 text-center">
                             <button
                               type="button"

@@ -334,6 +334,7 @@ export interface ClientGstTurnover {
   taxable_turnover: number;
   exempt_turnover: number;
   total_gst_turnover: number; // taxable_turnover + exempt_turnover
+  remark?: string; // Monthly Remark (April to March)
   created_at: string;
   updated_at: string;
 }
@@ -352,6 +353,7 @@ export interface FinancialReportData {
     taxable: number;
     exempt: number;
     total: number;
+    remark?: string;
   }[];
   gstTotals: {
     taxable: number;

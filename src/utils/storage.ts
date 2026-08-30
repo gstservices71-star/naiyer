@@ -1562,7 +1562,7 @@ export class GSTStorage {
   static batchSaveClientGstTurnover(
     clientId: number,
     fyId: number,
-    monthlyData: Record<string, { taxable: number; exempt: number }>
+    monthlyData: Record<string, { taxable: number; exempt: number; remark?: string }>
   ): void {
     const all = this.getGstTurnover();
     const now = getISTTimestamp();
@@ -1576,6 +1576,7 @@ export class GSTStorage {
       oldValues[`${r.month}_taxable`] = r.taxable_turnover;
       oldValues[`${r.month}_exempt`] = r.exempt_turnover;
       oldValues[`${r.month}_total`] = r.total_gst_turnover;
+      oldValues[`${r.month}_remark`] = r.remark || '';
     });
 
     // Remove existing turnover for this client + FY
@@ -1590,14 +1591,17 @@ export class GSTStorage {
       const taxable = Number(data.taxable) || 0;
       const exempt = Number(data.exempt) || 0;
       const total = taxable + exempt;
+      const remark = data.remark?.trim() || '';
 
       newValues[`${month}_taxable`] = taxable;
       newValues[`${month}_exempt`] = exempt;
       newValues[`${month}_total`] = total;
+      newValues[`${month}_remark`] = remark;
 
       if (
         (oldValues[`${month}_taxable`] ?? 0) !== taxable ||
-        (oldValues[`${month}_exempt`] ?? 0) !== exempt
+        (oldValues[`${month}_exempt`] ?? 0) !== exempt ||
+        (oldValues[`${month}_remark`] ?? '') !== remark
       ) {
         changedMonths.push(month);
       }
@@ -1610,6 +1614,7 @@ export class GSTStorage {
         taxable_turnover: taxable,
         exempt_turnover: exempt,
         total_gst_turnover: total,
+        remark: remark || undefined,
         created_at: now,
         updated_at: now,
       });
@@ -1632,7 +1637,7 @@ export class GSTStorage {
         oldValues,
         newValues,
         changedFields: changedMonths,
-        description: `Saved 12-month GST turnover (Taxable + Exempt) for ${client?.firm_name} (${changedMonths.length} months modified)`,
+        description: `Saved 12-month GST turnover (Taxable + Exempt + Remarks) for ${client?.firm_name} (${changedMonths.length} months modified)`,
       }
     );
   }
@@ -1642,13 +1647,15 @@ export class GSTStorage {
     fyId: number,
     month: string,
     taxable: number,
-    exempt: number
+    exempt: number,
+    remark?: string
   ): ClientGstTurnover {
     const all = this.getGstTurnover();
     const now = getISTTimestamp();
     const taxableNum = Number(taxable) || 0;
     const exemptNum = Number(exempt) || 0;
     const total = taxableNum + exemptNum;
+    const remarkStr = remark?.trim() || '';
 
     const existingIndex = all.findIndex(
       (g) => g.client_id === clientId && g.financial_year_id === fyId && g.month === month
@@ -1661,6 +1668,7 @@ export class GSTStorage {
         taxable_turnover: taxableNum,
         exempt_turnover: exemptNum,
         total_gst_turnover: total,
+        remark: remarkStr || undefined,
         updated_at: now,
       };
       all[existingIndex] = result;
@@ -1673,6 +1681,7 @@ export class GSTStorage {
         taxable_turnover: taxableNum,
         exempt_turnover: exemptNum,
         total_gst_turnover: total,
+        remark: remarkStr || undefined,
         created_at: now,
         updated_at: now,
       };

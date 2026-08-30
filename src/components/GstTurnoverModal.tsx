@@ -50,9 +50,9 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
   const [activeFYId, setActiveFYId] = useState<number>(selectedFY.id);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
-  // 12-month inputs: { [month]: { taxable: string; exempt: string } }
+  // 12-month inputs: { [month]: { taxable: string; exempt: string; remark: string } }
   const [monthlyInputs, setMonthlyInputs] = useState<
-    Record<string, { taxable: string; exempt: string }>
+    Record<string, { taxable: string; exempt: string; remark: string }>
   >({});
 
   // Active client object
@@ -84,13 +84,14 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
     if (!isOpen || !selectedClientId) return;
 
     const turnovers = GSTStorage.getClientGstTurnover(selectedClientId, activeFYId);
-    const inputs: Record<string, { taxable: string; exempt: string }> = {};
+    const inputs: Record<string, { taxable: string; exempt: string; remark: string }> = {};
 
     FY_MONTHS.forEach((month) => {
       const record = turnovers.find((t) => t.month === month);
       inputs[month] = {
         taxable: record && record.taxable_turnover > 0 ? String(record.taxable_turnover) : '',
         exempt: record && record.exempt_turnover > 0 ? String(record.exempt_turnover) : '',
+        remark: record?.remark || '',
       };
     });
 
@@ -115,13 +116,15 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
   };
 
   // Input change handler
-  const handleInputChange = (month: string, field: 'taxable' | 'exempt', value: string) => {
-    if (value && !/^\d*\.?\d*$/.test(value)) return;
+  const handleInputChange = (month: string, field: 'taxable' | 'exempt' | 'remark', value: string) => {
+    if (field !== 'remark' && value && !/^\d*\.?\d*$/.test(value)) return;
 
     setMonthlyInputs((prev) => ({
       ...prev,
       [month]: {
-        ...(prev[month] || { taxable: '', exempt: '' }),
+        taxable: prev[month]?.taxable || '',
+        exempt: prev[month]?.exempt || '',
+        remark: prev[month]?.remark || '',
         [field]: value,
       },
     }));
@@ -129,7 +132,7 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
 
   // Calculations
   const getMonthTotal = (month: string) => {
-    const data = monthlyInputs[month] || { taxable: '', exempt: '' };
+    const data = monthlyInputs[month] || { taxable: '', exempt: '', remark: '' };
     const taxable = parseFloat(data.taxable) || 0;
     const exempt = parseFloat(data.exempt) || 0;
     return taxable + exempt;
@@ -168,11 +171,12 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
   const handleSave = () => {
     if (!activeClient) return;
 
-    const dataToSave: Record<string, { taxable: number; exempt: number }> = {};
+    const dataToSave: Record<string, { taxable: number; exempt: number; remark?: string }> = {};
     FY_MONTHS.forEach((m) => {
       dataToSave[m] = {
         taxable: parseFloat(monthlyInputs[m]?.taxable) || 0,
         exempt: parseFloat(monthlyInputs[m]?.exempt) || 0,
+        remark: monthlyInputs[m]?.remark?.trim() || '',
       };
     });
 
@@ -201,9 +205,9 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
   // Quick action: Clear all inputs
   const handleClearAll = () => {
     if (window.confirm('Clear all 12-month turnover fields for this client?')) {
-      const cleared: Record<string, { taxable: string; exempt: string }> = {};
+      const cleared: Record<string, { taxable: string; exempt: string; remark: string }> = {};
       FY_MONTHS.forEach((m) => {
-        cleared[m] = { taxable: '', exempt: '' };
+        cleared[m] = { taxable: '', exempt: '', remark: '' };
       });
       setMonthlyInputs(cleared);
     }
@@ -213,13 +217,14 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
   const handleCopyFirstMonth = () => {
     const firstTaxable = monthlyInputs['April']?.taxable || '';
     const firstExempt = monthlyInputs['April']?.exempt || '';
-    if (!firstTaxable && !firstExempt) {
-      alert('Please enter April Taxable or Exempt amount first.');
+    const firstRemark = monthlyInputs['April']?.remark || '';
+    if (!firstTaxable && !firstExempt && !firstRemark) {
+      alert('Please enter April Taxable, Exempt or Remark first.');
       return;
     }
-    const updated: Record<string, { taxable: string; exempt: string }> = {};
+    const updated: Record<string, { taxable: string; exempt: string; remark: string }> = {};
     FY_MONTHS.forEach((m) => {
-      updated[m] = { taxable: firstTaxable, exempt: firstExempt };
+      updated[m] = { taxable: firstTaxable, exempt: firstExempt, remark: firstRemark };
     });
     setMonthlyInputs(updated);
   };
@@ -227,11 +232,12 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
   // Export 12-Month Data to CSV
   const handleExportCSV = () => {
     if (!activeClient) return;
-    const headers = 'Month,Taxable Sales (INR),Exempt Sales (INR),Total Sales (INR)\n';
+    const headers = 'Month,Taxable Sales (INR),Exempt Sales (INR),Total Sales (INR),Remark\n';
     const rows = FY_MONTHS.map((m) => {
       const tax = parseFloat(monthlyInputs[m]?.taxable) || 0;
       const ex = parseFloat(monthlyInputs[m]?.exempt) || 0;
-      return `${m},${tax},${ex},${tax + ex}`;
+      const rem = (monthlyInputs[m]?.remark || '').replace(/"/g, '""');
+      return `${m},${tax},${ex},${tax + ex},"${rem}"`;
     }).join('\n');
 
     const summary = `\nAnnual Taxable Total,${annualTaxableTotal}\nAnnual Exempt Total,${annualExemptTotal}\nAnnual Grand Total,${annualGrandTotal}\n`;
@@ -439,20 +445,14 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
                 Quick Tools:
               </span>
+
               <button
                 type="button"
                 onClick={handleCopyFirstMonth}
                 className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-semibold text-[11px] cursor-pointer"
-                title="Fill all months with April amount"
+                title="Fill all months with April amount & remark"
               >
                 Copy April to All Months
-              </button>
-              <button
-                type="button"
-                onClick={handleClearAll}
-                className="px-2.5 py-1 bg-white hover:bg-rose-50 border border-slate-300 hover:border-rose-300 text-slate-600 hover:text-rose-700 rounded-lg font-semibold text-[11px] cursor-pointer"
-              >
-                Clear All
               </button>
             </div>
 
@@ -476,13 +476,14 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
                   <th className="px-4 py-2.5 w-32">Month</th>
                   <th className="px-4 py-2.5">Taxable Sales (₹)</th>
                   <th className="px-4 py-2.5">Exempt Sales (₹)</th>
-                  <th className="px-4 py-2.5 text-right w-44">Total Sales (₹)</th>
+                  <th className="px-4 py-2.5 text-right w-36">Total Sales (₹)</th>
+                  <th className="px-3 py-2.5 min-w-[180px]">Monthly Remark (Apr - Mar)</th>
                   <th className="px-3 py-2.5 text-center w-28">GST Filing Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {FY_MONTHS.map((month, idx) => {
-                  const mData = monthlyInputs[month] || { taxable: '', exempt: '' };
+                  const mData = monthlyInputs[month] || { taxable: '', exempt: '', remark: '' };
                   const mTotal = getMonthTotal(month);
                   const isQuarterEnd = (idx + 1) % 3 === 0;
                   const quarterNum = Math.floor(idx / 3) + 1;
@@ -547,6 +548,17 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
                           </span>
                         </td>
 
+                        {/* Monthly Remark Input */}
+                        <td className="px-3 py-1.5">
+                          <input
+                            type="text"
+                            placeholder="Enter remark..."
+                            value={mData.remark || ''}
+                            onChange={(e) => handleInputChange(month, 'remark', e.target.value)}
+                            className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-[#78350F] focus:ring-1 focus:ring-[#78350F] rounded-lg px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition-all"
+                          />
+                        </td>
+
                         {/* GST Work Status */}
                         <td className="px-3 py-2 text-center">
                           <span
@@ -578,8 +590,8 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
                           <td className="px-4 py-2 text-right font-mono text-slate-900">
                             {formatINR(qTotals.total)}
                           </td>
-                          <td className="px-3 py-2 text-center text-[10px] text-slate-500">
-                            Quarter {quarterNum}
+                          <td colSpan={2} className="px-3 py-2 text-center text-[10px] text-slate-500">
+                            Quarter {quarterNum} Subtotal
                           </td>
                         </tr>
                       )}
@@ -603,7 +615,7 @@ export const GstTurnoverModal: React.FC<GstTurnoverModalProps> = ({
                   <td className="px-4 py-3 text-right font-mono text-emerald-400 text-sm">
                     {formatINR(annualGrandTotal)}
                   </td>
-                  <td className="px-3 py-3 text-center text-[10px] text-slate-400">
+                  <td colSpan={2} className="px-3 py-3 text-center text-[10px] text-slate-400">
                     12 Months Total
                   </td>
                 </tr>
