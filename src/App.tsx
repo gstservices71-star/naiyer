@@ -294,7 +294,7 @@ export default function App() {
     const target = users.find((u) => u.id === id);
     if (!target) return { success: false, error: 'User not found' };
     await CloudService.resetPassword(target.username, newPass);
-    const res = GSTStorage.resetPassword(target.username, newPass);
+    const res = await GSTStorage.resetPassword(target.username, newPass);
     if (res.success) {
       const updatedUsers = await CloudService.getUsers();
       setUsers(updatedUsers);

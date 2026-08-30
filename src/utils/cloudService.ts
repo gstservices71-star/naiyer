@@ -24,6 +24,7 @@ import {
   ClientGstTurnover,
   UserSession,
   OfficeVisit,
+  PasswordResetToken,
 } from '../types';
 import {
   initialActivityLogs,
@@ -41,7 +42,13 @@ import {
 } from '../data/initialBankData';
 import { initialGstTurnover } from '../data/initialGstData';
 import { initialOfficeVisits } from '../data/initialVisitsData';
-import { hashPassword, verifyPassword } from './authCrypto';
+import {
+  hashPassword,
+  verifyPassword,
+  generateSecureToken,
+  hashToken,
+  validatePasswordStrength,
+} from './authCrypto';
 import { getISTTimestamp, sanitizeAuditValues } from './storage';
 
 // Collection Names in Firestore
@@ -59,6 +66,7 @@ const COLLECTIONS = {
   GST_TURNOVER: 'portal_gst_turnover',
   SESSIONS: 'portal_sessions',
   OFFICE_VISITS: 'portal_office_visits',
+  PASSWORD_RESETS: 'portal_password_resets',
 };
 
 // In-Memory Synchronized Cloud Cache
@@ -501,6 +509,214 @@ export class CloudService {
       notifySubscribers();
     } catch (err) {
       console.warn('Could not delete office visit from cloud:', err);
+    }
+  }
+
+  // ==========================================
+  // FORGOT PASSWORD & GMAIL VERIFICATION
+  // ==========================================
+
+  /**
+   * Generates a single-use, 30-minute password reset token.
+   * Note: Always returns a neutral, non-disclosing message for account privacy.
+   */
+  static async requestPasswordReset(
+    email: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    resetToken?: string;
+    expiresAt?: number;
+    email?: string;
+  }> {
+    const cleanEmail = email.trim().toLowerCase();
+    const neutralMessage =
+      'अगर यह email registered है, तो password reset करने के लिए एक secure link आपके Gmail पर भेज दिया गया है।';
+
+    try {
+      const users = await this.getUsers();
+      const user = users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+      if (!user || user.status === 'inactive') {
+        // Return neutral response without disclosing non-existence (Security Requirement)
+        return {
+          success: true,
+          message: neutralMessage,
+        };
+      }
+
+      // Generate cryptographically secure random token
+      const rawToken = generateSecureToken(32);
+      const tokenHash = await hashToken(rawToken);
+      const nowMs = Date.now();
+      const expiresAt = nowMs + 30 * 60 * 1000; // 30 minutes expiration
+      const tokenId = `rst_${user.id}_${nowMs}`;
+
+      const resetDoc: PasswordResetToken = {
+        id: tokenId,
+        user_id: user.id,
+        email: user.email,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+        used_at: null,
+        created_at: getISTTimestamp(),
+        google_verified: false,
+      };
+
+      // Save to Cloud Firestore
+      await setDoc(doc(db, COLLECTIONS.PASSWORD_RESETS, tokenId), resetDoc);
+
+      return {
+        success: true,
+        message: neutralMessage,
+        resetToken: rawToken,
+        expiresAt,
+        email: user.email,
+      };
+    } catch (err: any) {
+      console.error('Password reset request error in cloud:', err);
+      // Even on database error, return graceful fallback
+      return {
+        success: true,
+        message: neutralMessage,
+      };
+    }
+  }
+
+  /**
+   * Validates a password reset token from URL or modal.
+   */
+  static async validateResetToken(
+    rawToken: string
+  ): Promise<{
+    isValid: boolean;
+    error?: string;
+    tokenDoc?: PasswordResetToken;
+    user?: User;
+  }> {
+    if (!rawToken || !rawToken.trim()) {
+      return { isValid: false, error: 'Invalid or missing reset token.' };
+    }
+
+    try {
+      const tokenHash = await hashToken(rawToken.trim());
+      const snap = await getDocs(collection(db, COLLECTIONS.PASSWORD_RESETS));
+      let found: PasswordResetToken | undefined;
+
+      snap.forEach((d) => {
+        const item = d.data() as PasswordResetToken;
+        if (item.token_hash === tokenHash) {
+          found = item;
+        }
+      });
+
+      if (!found) {
+        return { isValid: false, error: 'Invalid reset link or token not found.' };
+      }
+
+      if (found.used_at) {
+        return {
+          isValid: false,
+          error: 'This password reset link has already been used and is no longer valid.',
+        };
+      }
+
+      if (Date.now() > found.expires_at) {
+        return {
+          isValid: false,
+          error: 'This password reset link has expired (valid for 30 minutes). Please request a new one.',
+        };
+      }
+
+      const users = await this.getUsers();
+      const user = users.find((u) => u.id === found!.user_id);
+
+      return {
+        isValid: true,
+        tokenDoc: found,
+        user,
+      };
+    } catch (err: any) {
+      console.error('Error validating reset token:', err);
+      return { isValid: false, error: 'Failed to validate reset token.' };
+    }
+  }
+
+  /**
+   * Marks the reset session as Google-verified after user authenticates with matching Gmail.
+   */
+  static async markTokenGoogleVerified(
+    tokenId: string,
+    googleEmail: string,
+    googleSubjectId?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await updateDoc(doc(db, COLLECTIONS.PASSWORD_RESETS, tokenId), {
+        google_verified: true,
+        google_email: googleEmail,
+        google_subject_id: googleSubjectId || null,
+        updated_at: getISTTimestamp(),
+      });
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error updating Google verification in cloud:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Completes the password reset by hashing the new password and invalidating the token.
+   */
+  static async completeSecurePasswordReset(
+    rawToken: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string; message?: string }> {
+    const validation = validatePasswordStrength(newPassword);
+    if (!validation.isValid) {
+      return {
+        success: false,
+        error:
+          'Password must have at least 8 characters including uppercase, lowercase, number, and special character.',
+      };
+    }
+
+    const tokenResult = await this.validateResetToken(rawToken);
+    if (!tokenResult.isValid || !tokenResult.tokenDoc || !tokenResult.user) {
+      return {
+        success: false,
+        error: tokenResult.error || 'Password reset token is invalid or expired.',
+      };
+    }
+
+    const { tokenDoc, user } = tokenResult;
+    const passHash = await hashPassword(newPassword);
+    const now = getISTTimestamp();
+
+    try {
+      // 1. Update user password in cloud
+      await updateDoc(doc(db, COLLECTIONS.USERS, String(user.id)), {
+        password_hash: passHash,
+        password: undefined, // ensure plain-text is wiped
+        updated_at: now,
+      });
+
+      // 2. Mark this token as used
+      await updateDoc(doc(db, COLLECTIONS.PASSWORD_RESETS, tokenDoc.id), {
+        used_at: now,
+      });
+
+      // 3. Update memory user object
+      user.password_hash = passHash;
+      user.updated_at = now;
+      notifySubscribers();
+
+      return {
+        success: true,
+        message: 'Your password has been successfully changed. You can now login with your new password.',
+      };
+    } catch (err: any) {
+      console.error('Error completing password reset:', err);
+      return { success: false, error: err.message || 'Failed to update password.' };
     }
   }
 }

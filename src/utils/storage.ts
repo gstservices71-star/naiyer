@@ -19,6 +19,7 @@ import {
   OfficeVisitNote,
   OfficeVisitStatus,
   VisitorType,
+  PasswordResetToken,
 } from '../types';
 import {
   initialActivityLogs,
@@ -37,6 +38,12 @@ import {
 import { initialGstTurnover } from '../data/initialGstData';
 import { initialOfficeVisits } from '../data/initialVisitsData';
 import { validateGSTIN } from './gstValidation';
+import {
+  generateSecureToken,
+  hashToken,
+  hashPassword,
+  validatePasswordStrength,
+} from './authCrypto';
 
 export function getISTTimestamp(date: Date = new Date()): string {
   try {
@@ -88,6 +95,7 @@ const STORAGE_KEYS = {
   SESSIONS: 'gst_app_sessions_v1',
   CURRENT_SESSION_ID: 'gst_app_current_session_id',
   OFFICE_VISITS: 'gst_app_office_visits_v1',
+  PASSWORD_RESETS: 'gst_app_password_resets_v1',
 };
 
 // Resilient In-Memory Storage Fallback for restricted / private iframe environments
@@ -502,52 +510,204 @@ export class GSTStorage {
     this.setCurrentUser(null);
   }
 
-  static forgotPassword(email: string): { success: boolean; error?: string; resetToken?: string; message?: string } {
+  static getPasswordResets(): PasswordResetToken[] {
+    const raw = safeGetItem(STORAGE_KEYS.PASSWORD_RESETS);
+    if (!raw) return [];
+    return safeParse<PasswordResetToken[]>(raw, []);
+  }
+
+  static savePasswordResets(tokens: PasswordResetToken[]) {
+    safeSetItem(STORAGE_KEYS.PASSWORD_RESETS, JSON.stringify(tokens));
+  }
+
+  static async forgotPassword(
+    email: string
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    resetToken?: string;
+    expiresAt?: number;
+    message: string;
+    email?: string;
+  }> {
+    const neutralMessage =
+      'अगर यह email registered है, तो password reset करने के लिए एक secure link आपके Gmail पर भेज दिया गया है।';
+    const cleanEmail = email.trim().toLowerCase();
     const users = this.getUsers();
-    const user = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-    if (!user) {
-      return { success: false, error: 'No account registered with this email address.' };
+    const user = users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    if (!user || user.status === 'inactive') {
+      return {
+        success: true,
+        message: neutralMessage,
+      };
     }
-    if (user.status === 'inactive') {
-      return { success: false, error: 'This account is deactivated. Please contact the administrator.' };
-    }
-    const token = 'rst_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+    const rawToken = generateSecureToken(32);
+    const tokenHash = await hashToken(rawToken);
+    const nowMs = Date.now();
+    const expiresAt = nowMs + 30 * 60 * 1000; // 30 mins
+    const tokenId = `rst_${user.id}_${nowMs}`;
+
+    const resetDoc: PasswordResetToken = {
+      id: tokenId,
+      user_id: user.id,
+      email: user.email,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      used_at: null,
+      created_at: getISTTimestamp(),
+      google_verified: false,
+    };
+
+    const existing = this.getPasswordResets();
+    existing.unshift(resetDoc);
+    this.savePasswordResets(existing);
+
     this.logActivity('PASSWORD_RESET', `Password reset token requested for ${user.email}`, {
       module: 'Auth',
       userId: user.id,
       userName: user.name,
       userRole: user.role,
-      description: `Reset token generated for user email ${user.email}`,
+      description: `Single-use 30-minute password reset link generated for ${user.email}`,
     });
+
     return {
       success: true,
-      resetToken: token,
-      message: `Password reset request generated for ${user.email}. Use the token or link below to set a new password.`,
+      resetToken: rawToken,
+      expiresAt,
+      email: user.email,
+      message: neutralMessage,
     };
   }
 
-  static resetPassword(emailOrUsername: string, newPassword: string): { success: boolean; error?: string } {
-    if (!newPassword || newPassword.length < 6) {
-      return { success: false, error: 'New password must be at least 6 characters.' };
+  static async validateResetToken(
+    rawToken: string
+  ): Promise<{
+    isValid: boolean;
+    error?: string;
+    tokenDoc?: PasswordResetToken;
+    user?: User;
+  }> {
+    if (!rawToken || !rawToken.trim()) {
+      return { isValid: false, error: 'Invalid or missing reset token.' };
     }
-    const users = this.getUsers();
-    const userIdx = users.findIndex(
-      (u) => u.email.toLowerCase() === emailOrUsername.trim().toLowerCase() || u.username.toLowerCase() === emailOrUsername.trim().toLowerCase()
-    );
-    if (userIdx === -1) {
-      return { success: false, error: 'User account not found.' };
+
+    const tokenHash = await hashToken(rawToken.trim());
+    const list = this.getPasswordResets();
+    const found = list.find((t) => t.token_hash === tokenHash);
+
+    if (!found) {
+      return { isValid: false, error: 'Invalid reset link or token not found.' };
     }
-    users[userIdx].password = newPassword;
-    users[userIdx].updated_at = getISTTimestamp();
-    this.saveUsers(users);
-    this.logActivity('PASSWORD_RESET', `Password successfully updated for user ${users[userIdx].username}`, {
-      module: 'User Management',
-      userId: users[userIdx].id,
-      userName: users[userIdx].name,
-      userRole: users[userIdx].role,
-      description: `Password reset completed for account ${users[userIdx].username}`,
-    });
+
+    if (found.used_at) {
+      return {
+        isValid: false,
+        error: 'This password reset link has already been used and is no longer valid.',
+      };
+    }
+
+    if (Date.now() > found.expires_at) {
+      return {
+        isValid: false,
+        error: 'This password reset link has expired (valid for 30 minutes). Please request a new one.',
+      };
+    }
+
+    const user = this.getUsers().find((u) => u.id === found.user_id);
+    return {
+      isValid: true,
+      tokenDoc: found,
+      user,
+    };
+  }
+
+  static markTokenGoogleVerified(
+    tokenId: string,
+    googleEmail: string,
+    googleSubjectId?: string
+  ): { success: boolean; error?: string } {
+    const list = this.getPasswordResets();
+    const idx = list.findIndex((t) => t.id === tokenId);
+    if (idx === -1) return { success: false, error: 'Token not found.' };
+
+    list[idx].google_verified = true;
+    list[idx].google_email = googleEmail;
+    list[idx].google_subject_id = googleSubjectId || undefined;
+    this.savePasswordResets(list);
     return { success: true };
+  }
+
+  static async resetPassword(
+    rawTokenOrEmail: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string; message?: string }> {
+    const validation = validatePasswordStrength(newPassword);
+    if (!validation.isValid) {
+      return {
+        success: false,
+        error:
+          'Password must have at least 8 characters including uppercase, lowercase, number, and special character.',
+      };
+    }
+
+    const users = this.getUsers();
+    let targetUser: User | undefined;
+    let targetTokenDoc: PasswordResetToken | undefined;
+
+    // Check if passed string is a rawToken
+    if (rawTokenOrEmail.length >= 20) {
+      const tokenResult = await this.validateResetToken(rawTokenOrEmail);
+      if (tokenResult.isValid && tokenResult.user && tokenResult.tokenDoc) {
+        targetUser = tokenResult.user;
+        targetTokenDoc = tokenResult.tokenDoc;
+      }
+    }
+
+    // Fallback search by email/username for backward compatibility
+    if (!targetUser) {
+      targetUser = users.find(
+        (u) =>
+          u.email.toLowerCase() === rawTokenOrEmail.trim().toLowerCase() ||
+          u.username.toLowerCase() === rawTokenOrEmail.trim().toLowerCase()
+      );
+    }
+
+    if (!targetUser) {
+      return { success: false, error: 'User account or reset token not found.' };
+    }
+
+    const userIdx = users.findIndex((u) => u.id === targetUser!.id);
+    const passHash = await hashPassword(newPassword);
+    const now = getISTTimestamp();
+
+    users[userIdx].password = undefined; // Wipe plaintext password
+    users[userIdx].password_hash = passHash;
+    users[userIdx].updated_at = now;
+    this.saveUsers(users);
+
+    if (targetTokenDoc) {
+      const tokens = this.getPasswordResets();
+      const tIdx = tokens.findIndex((t) => t.id === targetTokenDoc!.id);
+      if (tIdx !== -1) {
+        tokens[tIdx].used_at = now;
+        this.savePasswordResets(tokens);
+      }
+    }
+
+    this.logActivity('PASSWORD_RESET', `Password successfully updated for user ${targetUser.username}`, {
+      module: 'User Management',
+      userId: targetUser.id,
+      userName: targetUser.name,
+      userRole: targetUser.role,
+      description: `Secure password reset completed for account ${targetUser.username}`,
+    });
+
+    return {
+      success: true,
+      message: 'Your password has been successfully changed. You can now login with your new password.',
+    };
   }
 
   static updateUser(
@@ -1896,5 +2056,6 @@ export class GSTStorage {
     safeRemoveItem(STORAGE_KEYS.BANK_STATEMENTS);
     safeRemoveItem(STORAGE_KEYS.GST_TURNOVER);
     safeRemoveItem(STORAGE_KEYS.OFFICE_VISITS);
+    safeRemoveItem(STORAGE_KEYS.PASSWORD_RESETS);
   }
 }

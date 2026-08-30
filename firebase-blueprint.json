@@ -117,6 +117,24 @@
         "status": { "type": "string", "description": "waiting, in_progress, completed, cancelled" }
       },
       "required": ["id", "visitor_type", "visitor_name", "visit_date", "in_time", "status"]
+    },
+    "PasswordResetToken": {
+      "title": "PasswordResetToken",
+      "description": "Single-use 30-minute password reset token with Google identity verification state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Token document ID" },
+        "user_id": { "type": "number", "description": "Linked user account ID" },
+        "email": { "type": "string", "format": "email", "description": "Registered Gmail/email address" },
+        "token_hash": { "type": "string", "description": "SHA-256 hash of secret random reset token" },
+        "expires_at": { "type": "number", "description": "Expiry timestamp (ms)" },
+        "used_at": { "type": "string", "description": "IST timestamp when password reset completed" },
+        "created_at": { "type": "string", "description": "Creation timestamp" },
+        "google_verified": { "type": "boolean", "description": "Whether Google authentication verified email ownership" },
+        "google_email": { "type": "string", "description": "Verified Google email" },
+        "google_subject_id": { "type": "string", "description": "Google UID/subject ID" }
+      },
+      "required": ["id", "user_id", "email", "token_hash", "expires_at", "created_at"]
     }
   },
   "firestore": {
@@ -147,6 +165,10 @@
     "/portal_office_visits/{visitId}": {
       "schema": { "$ref": "#/entities/OfficeVisit" },
       "description": "Office reception log register"
+    },
+    "/portal_password_resets/{tokenId}": {
+      "schema": { "$ref": "#/entities/PasswordResetToken" },
+      "description": "Password reset token requests and Google identity verification logs"
     }
   }
 }

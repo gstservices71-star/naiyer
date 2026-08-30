@@ -10,9 +10,25 @@ export interface User {
   password_hash?: string;
   role: UserRole;
   status: 'active' | 'inactive';
+  google_subject_id?: string | null;
+  email_verified?: boolean;
   created_at: string;
   updated_at: string;
   last_login?: string | null;
+}
+
+export interface PasswordResetToken {
+  id: string;
+  user_id: number;
+  email: string;
+  token_hash: string; // SHA-256 digest of secret token
+  expires_at: number; // Unix timestamp ms
+  used_at: string | null;
+  created_at: string;
+  google_verified: boolean;
+  google_email?: string;
+  google_subject_id?: string;
+  ip_hint?: string;
 }
 
 export type GSTType = 'Normal' | 'Composition' | 'QRMP' | 'regular' | 'composition' | 'qrmp';
