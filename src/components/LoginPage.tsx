@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GSTStorage } from '../utils/storage';
 import { CloudService } from '../utils/cloudService';
 import { User } from '../types';
@@ -13,7 +13,11 @@ import {
   KeyRound,
   ArrowRight,
   ShieldCheck,
-  HelpCircle,
+  Mail,
+  ExternalLink,
+  Copy,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 
 interface LoginPageProps {
@@ -32,12 +36,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotError, setForgotError] = useState('');
-  const [forgotSuccess, setForgotSuccess] = useState<{ token: string; message: string; email: string } | null>(null);
+  const [isSendingLink, setIsSendingLink] = useState(false);
+  const [sentLinkData, setSentLinkData] = useState<{
+    token: string;
+    resetUrl: string;
+    email: string;
+  } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Reset password form state inside modal
+  const [isResetStep, setIsResetStep] = useState(false);
+  const [activeResetEmail, setActiveResetEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState('');
+
+  // Check URL parameters for direct reset link on load
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('reset_token');
+      const email = params.get('email');
+      if (token && email) {
+        setActiveResetEmail(decodeURIComponent(email));
+        setIsResetStep(true);
+        setShowForgotModal(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +111,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleForgotSubmit = async (e: React.FormEvent) => {
+  const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
 
@@ -91,15 +120,39 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    const res = GSTStorage.forgotPassword(forgotEmail);
-    if (!res.success) {
-      setForgotError(res.error || 'Email address not found.');
-    } else if (res.resetToken) {
-      setForgotSuccess({
-        token: res.resetToken,
-        message: res.message || 'Reset token generated successfully.',
-        email: forgotEmail,
-      });
+    setIsSendingLink(true);
+
+    // Simulate sending email to user inbox with token
+    setTimeout(() => {
+      const res = GSTStorage.forgotPassword(forgotEmail);
+      setIsSendingLink(false);
+
+      if (!res.success) {
+        setForgotError(res.error || 'Email address not found in registered accounts.');
+      } else if (res.resetToken) {
+        const origin = window.location.origin + window.location.pathname;
+        const resetUrl = `${origin}?reset_token=${res.resetToken}&email=${encodeURIComponent(forgotEmail.trim())}`;
+        setSentLinkData({
+          token: res.resetToken,
+          resetUrl,
+          email: forgotEmail.trim(),
+        });
+      }
+    }, 600);
+  };
+
+  const handleOpenResetStepFromLink = () => {
+    if (sentLinkData) {
+      setActiveResetEmail(sentLinkData.email);
+      setIsResetStep(true);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (sentLinkData) {
+      navigator.clipboard.writeText(sentLinkData.resetUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
     }
   };
 
@@ -117,19 +170,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    if (forgotSuccess) {
+    if (activeResetEmail) {
       // Update in cloud and local simultaneously
-      await CloudService.resetPassword(forgotSuccess.email, newPassword);
-      const res = GSTStorage.resetPassword(forgotSuccess.email, newPassword);
+      await CloudService.resetPassword(activeResetEmail, newPassword);
+      const res = GSTStorage.resetPassword(activeResetEmail, newPassword);
       if (res.success) {
         setResetSuccessMessage('Password reset successfully! You can now log in with your new password.');
         setTimeout(() => {
           setShowForgotModal(false);
-          setForgotSuccess(null);
+          setSentLinkData(null);
+          setIsResetStep(false);
           setForgotEmail('');
           setNewPassword('');
           setConfirmPassword('');
           setResetSuccessMessage('');
+          setIdentifier(activeResetEmail);
           setPassword(newPassword);
         }, 1500);
       } else {
@@ -337,16 +392,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-sm text-white">Forgot Password & Reset</h3>
+                <h3 className="font-bold text-sm text-white">
+                  {isResetStep ? 'Create New Password' : 'Reset Password by Email Link'}
+                </h3>
               </div>
               <button
                 onClick={() => {
                   setShowForgotModal(false);
-                  setForgotSuccess(null);
+                  setSentLinkData(null);
+                  setIsResetStep(false);
                   setForgotError('');
                   setResetSuccessMessage('');
                 }}
-                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-slate-700"
+                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-slate-700 cursor-pointer"
               >
                 ✕
               </button>
@@ -366,69 +424,174 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             )}
 
-            {!forgotSuccess ? (
-              <form onSubmit={handleForgotSubmit} className="space-y-4">
-                <p className="text-xs text-slate-400">
-                  Enter your registered account email address. A one-time secure password reset token will be verified.
-                </p>
+            {!isResetStep ? (
+              !sentLinkData ? (
+                <form onSubmit={handleSendResetEmail} className="space-y-4">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Enter your registered account email ID. A secure one-time password reset link will be sent to your email to generate a new password.
+                  </p>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Registered Email Address <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="e.g. admin@gstmanagement.com"
-                    required
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Registered Email ID <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="e.g. admin@gstmanagement.com or user@gmail.com"
+                        required
+                        autoFocus
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
 
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-colors"
-                  >
-                    Generate Reset Link / Token
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotModal(false)}
-                    className="px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold text-xs py-2.5 rounded-xl transition-colors"
-                  >
-                    Cancel
-                  </button>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSendingLink}
+                      className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      {isSendingLink ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Sending Link...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>Send Password Reset Link</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      className="px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Link Sent State - Simulates the inbox email with one-click direct password change link */
+                <div className="space-y-4">
+                  <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-xl text-xs text-emerald-200">
+                    <div className="font-bold flex items-center gap-1.5 text-emerald-300 mb-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Password Reset Link Dispatched</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      A unique reset link has been dispatched to <strong>{sentLinkData.email}</strong>.
+                    </p>
+                  </div>
+
+                  {/* Simulated Email Box */}
+                  <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-2">
+                      <div className="flex items-center gap-1.5 font-medium text-slate-300">
+                        <Mail className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Email to: {sentLinkData.email}</span>
+                      </div>
+                      <span className="text-[10px] bg-blue-900/40 text-blue-300 px-1.5 py-0.5 rounded font-mono">
+                        Just Now
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-300 space-y-1.5">
+                      <div className="font-semibold text-white">Subject: Reset your GST Portal Password</div>
+                      <p className="text-[11px] text-slate-400">
+                        You recently requested to reset your password. Click the link below to generate and save your new password:
+                      </p>
+                    </div>
+
+                    {/* Interactive Reset Link Button */}
+                    <button
+                      type="button"
+                      onClick={handleOpenResetStepFromLink}
+                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer group"
+                    >
+                      <ExternalLink className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                      <span>👉 Click Link to Change Password</span>
+                    </button>
+
+                    {/* Copy Link Option */}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-slate-500 truncate max-w-[240px] font-mono">
+                        {sentLinkData.resetUrl}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleCopyLink}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-400 hover:text-blue-300 cursor-pointer ml-2"
+                      >
+                        {copiedLink ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy Link</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSentLinkData(null);
+                        setShowForgotModal(false);
+                      }}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                    >
+                      Back to Login
+                    </button>
+                  </div>
                 </div>
-              </form>
+              )
             ) : (
+              /* Step 2: New Password Generation Form */
               <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
                 <div className="p-3 bg-blue-950/40 border border-blue-800/60 rounded-xl text-xs text-blue-200">
-                  <div className="font-bold flex items-center gap-1.5 text-blue-300 mb-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <div className="font-bold flex items-center gap-1.5 text-blue-300 mb-0.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     <span>Reset Token Verified</span>
                   </div>
                   <div className="text-[11px] text-slate-300">
-                    Target User: <strong>{forgotSuccess.email}</strong>
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-mono mt-1 break-all">
-                    Token: {forgotSuccess.token}
+                    Generating new password for: <strong className="text-white">{activeResetEmail}</strong>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                    New Password (Min 6 chars) <span className="text-rose-400">*</span>
+                    New Password (Min 6 characters) <span className="text-rose-400">*</span>
                   </label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Enter new password"
-                    required
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter your new secure password"
+                      required
+                      autoFocus
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -439,26 +602,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter new password"
+                    placeholder="Re-enter your new password"
                     required
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
                   />
                 </div>
 
                 <div className="flex gap-2 pt-2">
                   <button
                     type="submit"
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-colors"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
                   >
-                    Save & Update Password
+                    Save & Generate New Password
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setForgotSuccess(null);
+                      setIsResetStep(false);
+                      setSentLinkData(null);
                       setShowForgotModal(false);
                     }}
-                    className="px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold text-xs py-2.5 rounded-xl transition-colors"
+                    className="px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>

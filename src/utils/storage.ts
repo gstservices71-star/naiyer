@@ -1477,6 +1477,70 @@ export class GSTStorage {
     );
   }
 
+  static saveClientMonthGstTurnover(
+    clientId: number,
+    fyId: number,
+    month: string,
+    taxable: number,
+    exempt: number
+  ): ClientGstTurnover {
+    const all = this.getGstTurnover();
+    const now = getISTTimestamp();
+    const taxableNum = Number(taxable) || 0;
+    const exemptNum = Number(exempt) || 0;
+    const total = taxableNum + exemptNum;
+
+    const existingIndex = all.findIndex(
+      (g) => g.client_id === clientId && g.financial_year_id === fyId && g.month === month
+    );
+
+    let result: ClientGstTurnover;
+    if (existingIndex >= 0) {
+      result = {
+        ...all[existingIndex],
+        taxable_turnover: taxableNum,
+        exempt_turnover: exemptNum,
+        total_gst_turnover: total,
+        updated_at: now,
+      };
+      all[existingIndex] = result;
+    } else {
+      result = {
+        id: Date.now() + Math.floor(Math.random() * 10000),
+        client_id: clientId,
+        financial_year_id: fyId,
+        month,
+        taxable_turnover: taxableNum,
+        exempt_turnover: exemptNum,
+        total_gst_turnover: total,
+        created_at: now,
+        updated_at: now,
+      };
+      all.push(result);
+    }
+
+    this.saveGstTurnover(all);
+
+    const client = this.getClientById(clientId);
+    const fy = this.getFinancialYears().find((f) => f.id === fyId);
+
+    this.logActivity(
+      'SAVE',
+      `Saved ${month} GST Turnover for ${client?.firm_name || 'Client #' + clientId} (Taxable: ₹${taxableNum.toLocaleString('en-IN')}, Exempt: ₹${exemptNum.toLocaleString('en-IN')})`,
+      {
+        module: 'GST Turnover',
+        clientId,
+        clientName: client?.client_name,
+        firmName: client?.firm_name,
+        financialYearId: fyId,
+        financialYear: fy?.display_name,
+        description: `Manual turnover entry: ${month} (Taxable: ₹${taxableNum}, Exempt: ₹${exemptNum}, Total: ₹${total})`,
+      }
+    );
+
+    return result;
+  }
+
   // ==========================================
   // REPORT COMPILER HELPER (REAL-TIME AGGREGATION)
   // ==========================================

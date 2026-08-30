@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { User } from '../types';
 import {
   LayoutDashboard,
@@ -17,6 +17,10 @@ import {
   Landmark,
   ShieldCheck,
   ClipboardList,
+  Calculator,
+  ChevronDown,
+  ChevronRight,
+  Table,
 } from 'lucide-react';
 
 export type TabType =
@@ -24,6 +28,8 @@ export type TabType =
   | 'clients'
   | 'office-visits'
   | 'monthly-work'
+  | 'gst-turnover-entry'
+  | 'gst-turnover-matrix'
   | 'bank-turnover'
   | 'reports'
   | 'financial-years'
@@ -68,7 +74,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: inVisitsCount > 0 ? `${inVisitsCount} IN` : 'Register',
       badgeColor: inVisitsCount > 0 ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40' : 'bg-slate-700/80 text-slate-300',
     },
-    { id: 'monthly-work' as TabType, label: 'Monthly GST Work', icon: CalendarCheck2, badge: pendingCount > 0 ? `${pendingCount} pending` : null, badgeColor: 'bg-amber-100 text-amber-800' },
+    {
+      id: 'monthly-work' as TabType,
+      label: 'Monthly GST Work',
+      icon: CalendarCheck2,
+      badge: pendingCount > 0 ? `${pendingCount} pending` : null,
+      badgeColor: 'bg-amber-100 text-amber-800',
+    },
+    {
+      id: 'gst-turnover-entry' as TabType,
+      label: 'GST Turnover Entry',
+      icon: Calculator,
+      badge: '12-Month',
+      badgeColor: 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30',
+    },
     { id: 'bank-turnover' as TabType, label: 'Bank Turnover', icon: Landmark, badge: '5 Banks', badgeColor: 'bg-indigo-500/20 text-indigo-300' },
     { id: 'reports' as TabType, label: 'Reports & PDF', icon: FileSpreadsheet, badge: 'PDF', badgeColor: 'bg-blue-500/20 text-blue-300' },
   ];
@@ -128,7 +147,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isItemActive = activeTab === item.id;
+
             return (
               <button
                 key={item.id}
@@ -138,13 +158,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClose();
                 }}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  isActive
+                  isItemActive
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 ${isItemActive ? 'text-white' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </div>
                 {item.badge !== null && (

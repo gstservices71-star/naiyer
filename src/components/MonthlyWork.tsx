@@ -1,5 +1,14 @@
-import React, { useState, useMemo } from 'react';
-import { Client, FinancialYear, FY_MONTHS, MonthlyWork as MonthlyWorkType, User, WorkStatus } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  Client,
+  FinancialYear,
+  FY_MONTHS,
+  MonthlyWork as MonthlyWorkType,
+  User,
+  WorkStatus,
+  ClientGstTurnover,
+} from '../types';
+import { GSTStorage } from '../utils/storage';
 import {
   Search,
   Filter,
@@ -21,6 +30,13 @@ import {
   MinusSquare,
   RotateCcw,
   RefreshCw,
+  Calculator,
+  TrendingUp,
+  Table,
+  Eye,
+  Plus,
+  Coins,
+  ArrowRight,
 } from 'lucide-react';
 import {
   generateMonthlyWorkReportPDF,
@@ -28,6 +44,7 @@ import {
   MonthlyWorkExportItem,
   MonthlyWorkFilterInfo,
 } from '../utils/pdfGenerator';
+import { GstTurnoverModal } from './GstTurnoverModal';
 
 interface MonthlyWorkProps {
   clients: Client[];
@@ -49,6 +66,7 @@ interface MonthlyWorkProps {
   initialSearchQuery?: string;
   initialStatusFilter?: string;
   initialSchemeFilter?: string;
+  initialViewMode?: 'monthly' | 'annual-matrix';
   onExportCSV?: () => void;
   onRefresh?: () => void;
 }
@@ -57,22 +75,28 @@ const STATUS_OPTIONS: WorkStatus[] = [
   'Not Started',
   'Pending',
   'Completed',
+  'Nil Filed',
+  'Data Received',
+  'In Process',
+  'Challan Generated',
   'Bill Pending',
   'Tax Payment Pending',
   'Documents Pending',
   'Client Response Pending',
+  'Client Delay',
   'Other',
 ];
 
 const REMARK_PRESETS = [
-  'Bill अभी प्राप्त नहीं हुआ।',
-  'Client ने tax payment नहीं किया है।',
-  'Documents / Statements pending हैं।',
+  'Bill not received from client.',
+  'Tax payment pending by client.',
+  'Bank statement / documents pending.',
   'Client response pending.',
   'Challan generated, awaiting OTP.',
   'Data received, preparing GSTR-3B.',
   'GSTR-1 & 3B filed successfully.',
   'Nil return filed.',
+  'Client delayed sending invoices.',
 ];
 
 const normalizeCat = (val?: string): 'Normal' | 'Composition' | 'QRMP' => {
@@ -97,6 +121,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   initialSearchQuery = '',
   initialStatusFilter = 'all',
   initialSchemeFilter = 'all',
+  initialViewMode = 'monthly',
   onExportCSV,
   onRefresh,
 }) => {
@@ -104,17 +129,59 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
   const [staffFilter, setStaffFilter] = useState('all');
   const [schemeFilter, setSchemeFilter] = useState(initialSchemeFilter || 'all');
+  const [workViewMode, setWorkViewMode] = useState<'monthly' | 'annual-matrix'>(initialViewMode);
+
+  // Sync initial view mode when switching from sidebar submenu
+  useEffect(() => {
+    if (initialViewMode) {
+      setWorkViewMode(initialViewMode);
+    }
+  }, [initialViewMode]);
 
   // Draft local edits for instant responsive typing without lagging global store
   const [draftStatuses, setDraftStatuses] = useState<Record<number, WorkStatus>>({});
   const [draftRemarks, setDraftRemarks] = useState<Record<number, string>>({});
+  const [draftTaxable, setDraftTaxable] = useState<Record<number, string>>({});
+  const [draftExempt, setDraftExempt] = useState<Record<number, string>>({});
   const [savedRowIds, setSavedRowIds] = useState<Record<number, boolean>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // 12-Month GST Turnover Modal State
+  const [isTurnoverModalOpen, setIsTurnoverModalOpen] = useState(false);
+  const [selectedTurnoverClientId, setSelectedTurnoverClientId] = useState<number | null>(null);
+
+  // GST Turnover records from store
+  const [gstTurnoverList, setGstTurnoverList] = useState<ClientGstTurnover[]>([]);
+
+  // Load GST turnover records
+  const loadGstTurnover = () => {
+    const list = GSTStorage.getGstTurnover();
+    setGstTurnoverList(list);
+
+    // Initialize draft taxable & exempt for current month
+    const taxDrafts: Record<number, string> = {};
+    const exDrafts: Record<number, string> = {};
+
+    list
+      .filter((t) => t.financial_year_id === selectedFY.id && t.month === selectedMonth)
+      .forEach((rec) => {
+        taxDrafts[rec.client_id] = rec.taxable_turnover > 0 ? String(rec.taxable_turnover) : '';
+        exDrafts[rec.client_id] = rec.exempt_turnover > 0 ? String(rec.exempt_turnover) : '';
+      });
+
+    setDraftTaxable(taxDrafts);
+    setDraftExempt(exDrafts);
+  };
+
+  useEffect(() => {
+    loadGstTurnover();
+  }, [selectedFY.id, selectedMonth]);
 
   const handleRefreshClick = () => {
     setIsRefreshing(true);
     setDraftStatuses({});
     setDraftRemarks({});
+    loadGstTurnover();
     if (onRefresh) {
       onRefresh();
     }
@@ -140,29 +207,74 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
     return map;
   }, [monthlyWork, selectedFY.id, selectedMonth]);
 
+  // Map for GST turnover for selected FY & month
+  const turnoverMonthMap = useMemo(() => {
+    const map = new Map<number, ClientGstTurnover>();
+    gstTurnoverList
+      .filter((t) => t.financial_year_id === selectedFY.id && t.month === selectedMonth)
+      .forEach((rec) => map.set(rec.client_id, rec));
+    return map;
+  }, [gstTurnoverList, selectedFY.id, selectedMonth]);
+
   // Status breakdown calculations
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       all: activeClients.length,
+      'All Pending': 0,
       Completed: 0,
-      Pending: 0,
-      'Bill Pending': 0,
-      'Tax Payment Pending': 0,
-      'Documents Pending': 0,
-      'Client Response Pending': 0,
+      'Nil Filed': 0,
       'Not Started': 0,
     };
 
+    STATUS_OPTIONS.forEach((opt) => {
+      counts[opt] = 0;
+    });
+
     activeClients.forEach((c) => {
       const rec = workMap.get(c.id);
-      const st = rec ? rec.status : 'Not Started';
+      const st: WorkStatus = draftStatuses[c.id] || (rec ? rec.status : 'Not Started');
       if (counts[st] !== undefined) {
         counts[st]++;
+      } else {
+        counts[st] = 1;
+      }
+
+      if (st !== 'Completed' && st !== 'Nil Filed' && st !== 'Not Started') {
+        counts['All Pending']++;
       }
     });
 
     return counts;
-  }, [activeClients, workMap]);
+  }, [activeClients, workMap, draftStatuses]);
+
+  // Monthly summary calculations for Taxable and Exempt
+  const monthlyTurnoverSummary = useMemo(() => {
+    let totalTaxable = 0;
+    let totalExempt = 0;
+    let clientsWithTurnover = 0;
+
+    activeClients.forEach((c) => {
+      const taxStr = draftTaxable[c.id];
+      const exStr = draftExempt[c.id];
+      const rec = turnoverMonthMap.get(c.id);
+
+      const tax = taxStr !== undefined ? parseFloat(taxStr) || 0 : rec?.taxable_turnover || 0;
+      const ex = exStr !== undefined ? parseFloat(exStr) || 0 : rec?.exempt_turnover || 0;
+
+      if (tax > 0 || ex > 0) {
+        clientsWithTurnover++;
+      }
+      totalTaxable += tax;
+      totalExempt += ex;
+    });
+
+    return {
+      totalTaxable,
+      totalExempt,
+      grandTotal: totalTaxable + totalExempt,
+      clientsWithTurnover,
+    };
+  }, [activeClients, draftTaxable, draftExempt, turnoverMonthMap]);
 
   // Filter clients
   const filteredClients = useMemo(() => {
@@ -196,13 +308,15 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
         }
       }
 
-      // Status
+      // Status Filter
       const rec = workMap.get(client.id);
       const curStatus: WorkStatus = draftStatuses[client.id] || (rec ? rec.status : 'Not Started');
 
       if (statusFilter !== 'all') {
-        if (statusFilter === 'Pending') {
-          if (curStatus === 'Completed' || curStatus === 'Not Started') return false;
+        if (statusFilter === 'Pending' || statusFilter === 'All Pending') {
+          if (curStatus === 'Completed' || curStatus === 'Nil Filed' || curStatus === 'Not Started') return false;
+        } else if (statusFilter === 'Completed') {
+          if (curStatus !== 'Completed' && curStatus !== 'Nil Filed') return false;
         } else if (curStatus !== statusFilter) {
           return false;
         }
@@ -331,10 +445,12 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
       ? draftRemarks[clientId]
       : (workMap.get(clientId)?.remark || '');
 
-    // Auto-save on status change for fast workflow
+    // Auto-save status
     onUpdateStatus(selectedFY.id, selectedMonth, clientId, newStatus, currentRemark);
 
-    // Show temporary saved indicator
+    // Also persist turnover if typed
+    saveClientTurnover(clientId);
+
     setSavedRowIds((prev) => ({ ...prev, [clientId]: true }));
     setTimeout(() => {
       setSavedRowIds((prev) => ({ ...prev, [clientId]: false }));
@@ -345,17 +461,64 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
     setDraftRemarks((prev) => ({ ...prev, [clientId]: text }));
   };
 
+  const handleTaxableChange = (clientId: number, value: string) => {
+    if (value && !/^\d*\.?\d*$/.test(value)) return;
+    setDraftTaxable((prev) => ({ ...prev, [clientId]: value }));
+  };
+
+  const handleExemptChange = (clientId: number, value: string) => {
+    if (value && !/^\d*\.?\d*$/.test(value)) return;
+    setDraftExempt((prev) => ({ ...prev, [clientId]: value }));
+  };
+
+  const saveClientTurnover = (clientId: number) => {
+    const taxStr = draftTaxable[clientId];
+    const exStr = draftExempt[clientId];
+    const rec = turnoverMonthMap.get(clientId);
+
+    const taxableNum = taxStr !== undefined ? parseFloat(taxStr) || 0 : rec?.taxable_turnover || 0;
+    const exemptNum = exStr !== undefined ? parseFloat(exStr) || 0 : rec?.exempt_turnover || 0;
+
+    if (taxStr !== undefined || exStr !== undefined || rec) {
+      GSTStorage.saveClientMonthGstTurnover(
+        clientId,
+        selectedFY.id,
+        selectedMonth,
+        taxableNum,
+        exemptNum
+      );
+      loadGstTurnover();
+    }
+  };
+
   const handleSaveRow = (clientId: number) => {
     const rec = workMap.get(clientId);
     const status = draftStatuses[clientId] || (rec ? rec.status : 'Not Started');
     const remark = draftRemarks[clientId] !== undefined ? draftRemarks[clientId] : (rec?.remark || '');
 
+    // 1. Save work status and remark
     onUpdateStatus(selectedFY.id, selectedMonth, clientId, status, remark);
+
+    // 2. Save Taxable and Exempt turnover figures
+    saveClientTurnover(clientId);
 
     setSavedRowIds((prev) => ({ ...prev, [clientId]: true }));
     setTimeout(() => {
       setSavedRowIds((prev) => ({ ...prev, [clientId]: false }));
     }, 2000);
+  };
+
+  const handleOpenTurnoverModal = (clientId: number) => {
+    setSelectedTurnoverClientId(clientId);
+    setIsTurnoverModalOpen(true);
+  };
+
+  const formatINR = (val: number): string => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(val || 0);
   };
 
   const getStaffName = (staffId?: number) => {
@@ -368,19 +531,36 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* 12-Month GST Turnover Modal */}
+      {isTurnoverModalOpen && (
+        <GstTurnoverModal
+          isOpen={isTurnoverModalOpen}
+          onClose={() => setIsTurnoverModalOpen(false)}
+          clients={activeClients}
+          initialClientId={selectedTurnoverClientId}
+          selectedFY={selectedFY}
+          financialYears={financialYears}
+          onSelectFY={onSelectFY}
+          monthlyWork={monthlyWork}
+          onSaved={() => {
+            loadGstTurnover();
+          }}
+        />
+      )}
+
       {/* Top Header Card */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold text-slate-900">
-              Monthly GST Work Tracker
+              Monthly GST Work & Filing Tracker
             </h2>
             <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-0.5 rounded-full">
               {selectedMonth} ({selectedFY.display_name})
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Isolated monthly workspace. Status changes are stored in current FY and logged with audit trail.
+            Track monthly GST filing status, client remarks, and compliance notes.
           </p>
         </div>
 
@@ -423,7 +603,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
             </select>
           </div>
 
-          {/* Dedicated Refresh Button for Selected FY & Month */}
+          {/* Refresh Button */}
           <button
             id="monthly-work-refresh-btn"
             onClick={handleRefreshClick}
@@ -448,11 +628,16 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
             title="Export CSV matching current filter or custom selection"
           >
             {isExportingCsv ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Exporting...</span>
+              </>
             ) : (
-              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <>
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>CSV ({exportCount})</span>
+              </>
             )}
-            <span>Export CSV ({exportCount})</span>
           </button>
 
           {/* Export Filtered PDF */}
@@ -461,191 +646,233 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
             onClick={handleExportFilteredPDF}
             disabled={isExportingPdf || filteredClients.length === 0}
             className="flex items-center gap-1.5 bg-[#1E3A8A] hover:bg-[#172554] disabled:opacity-50 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
-            title="Export official PDF report matching current filter or custom selection"
+            title="Export official PDF compliance report"
           >
             {isExportingPdf ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Generating...</span>
+              </>
             ) : (
-              <FileText className="w-3.5 h-3.5" />
+              <>
+                <FileText className="w-3.5 h-3.5" />
+                <span>PDF ({exportCount})</span>
+              </>
             )}
-            <span>Export PDF ({exportCount})</span>
           </button>
         </div>
       </div>
 
-      {/* Filter Status Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-        <button
-          onClick={() => setStatusFilter('all')}
-          className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-            statusFilter === 'all'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          All Clients ({statusCounts.all})
-        </button>
+      {/* Filter Toolbar */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search by File No, GSTIN, Firm Name, Mobile */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              id="monthly-work-search-input"
+              type="text"
+              placeholder="Search by File No (📁), GSTIN, Firm, Contact, Mobile 1, Mobile 2..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 pl-9 pr-4 py-2 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white transition-all"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold"
+              >
+                ✕
+              </button>
+            )}
+          </div>
 
-        <button
-          onClick={() => setStatusFilter('Completed')}
-          className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-            statusFilter === 'Completed'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100'
-          }`}
-        >
-          Completed ({statusCounts.Completed})
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('Bill Pending')}
-          className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-            statusFilter === 'Bill Pending'
-              ? 'bg-orange-600 text-white shadow-xs'
-              : 'bg-orange-50 border border-orange-200 text-orange-800 hover:bg-orange-100'
-          }`}
-        >
-          Bill Pending ({statusCounts['Bill Pending']})
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('Tax Payment Pending')}
-          className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-            statusFilter === 'Tax Payment Pending'
-              ? 'bg-rose-600 text-white shadow-xs'
-              : 'bg-rose-50 border border-rose-200 text-rose-800 hover:bg-rose-100'
-          }`}
-        >
-          Tax Pending ({statusCounts['Tax Payment Pending']})
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('Documents Pending')}
-          className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-            statusFilter === 'Documents Pending'
-              ? 'bg-purple-600 text-white shadow-xs'
-              : 'bg-purple-50 border border-purple-200 text-purple-800 hover:bg-purple-100'
-          }`}
-        >
-          Docs Pending ({statusCounts['Documents Pending']})
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('Client Response Pending')}
-          className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-            statusFilter === 'Client Response Pending'
-              ? 'bg-cyan-600 text-white shadow-xs'
-              : 'bg-cyan-50 border border-cyan-200 text-cyan-800 hover:bg-cyan-100'
-          }`}
-        >
-          Client Response ({statusCounts['Client Response Pending']})
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('Not Started')}
-          className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-            statusFilter === 'Not Started'
-              ? 'bg-slate-700 text-white shadow-xs'
-              : 'bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          Not Started ({statusCounts['Not Started']})
-        </button>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="bg-white p-3.5 rounded-2xl border border-[#E8DCC4] shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            id="monthly-work-search-input"
-            type="text"
-            placeholder="Search by File No, Firm, GSTIN or Mobile..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* Category Filter */}
-          <div className="flex items-center gap-1 bg-[#FAF6F0] border border-[#E8DCC4] rounded-xl px-2.5 py-1 text-xs">
-            <span className="text-[#78350F] font-bold">Category:</span>
+          {/* Scheme / Category Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 uppercase">Scheme:</span>
             <select
-              id="monthly-work-category-filter"
+              id="monthly-work-scheme-filter"
               value={schemeFilter}
               onChange={(e) => setSchemeFilter(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#78350F] cursor-pointer"
             >
-              <option value="all">All Categories</option>
-              <option value="Normal">Normal</option>
+              <option value="all">All Schemes</option>
+              <option value="Normal">Normal (Regular)</option>
               <option value="Composition">Composition</option>
               <option value="QRMP">QRMP</option>
             </select>
           </div>
 
-          {/* Staff */}
-          <div className="flex items-center gap-1 bg-[#FAF6F0] border border-[#E8DCC4] rounded-xl px-2.5 py-1 text-xs">
-            <span className="text-[#78350F] font-bold">Staff:</span>
+          {/* Full GST Status Dropdown Selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 uppercase shrink-0">GST Status:</span>
             <select
-              value={staffFilter}
-              onChange={(e) => setStaffFilter(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              id="monthly-work-status-filter-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#78350F] cursor-pointer min-w-[230px]"
             >
-              <option value="all">All Staff</option>
-              <option value="unassigned">Unassigned</option>
-              {users
-                .filter((u) => u.role === 'staff')
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
+              <option value="all">All GST Statuses ({statusCounts.all})</option>
+              <option value="All Pending">⚡ All Pending Action ({statusCounts['All Pending']})</option>
+              <option value="Completed">✓ Completed ({statusCounts.Completed})</option>
+              <option value="Nil Filed">✓ Nil Filed ({statusCounts['Nil Filed'] || 0})</option>
+              <option value="Data Received">📥 Data Received ({statusCounts['Data Received'] || 0})</option>
+              <option value="In Process">⏳ In Process ({statusCounts['In Process'] || 0})</option>
+              <option value="Challan Generated">🧾 Challan Generated ({statusCounts['Challan Generated'] || 0})</option>
+              <option value="Bill Pending">📄 Bill Pending ({statusCounts['Bill Pending'] || 0})</option>
+              <option value="Tax Payment Pending">💰 Tax Payment Pending ({statusCounts['Tax Payment Pending'] || 0})</option>
+              <option value="Documents Pending">📂 Documents Pending ({statusCounts['Documents Pending'] || 0})</option>
+              <option value="Client Response Pending">📞 Client Response Pending ({statusCounts['Client Response Pending'] || 0})</option>
+              <option value="Client Delay">⚠️ Client Delay ({statusCounts['Client Delay'] || 0})</option>
+              <option value="Not Started">⏸️ Not Started ({statusCounts['Not Started'] || 0})</option>
+              <option value="Other">Other ({statusCounts['Other'] || 0})</option>
             </select>
           </div>
 
-          {(searchTerm || schemeFilter !== 'all' || staffFilter !== 'all' || statusFilter !== 'all') && (
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setSchemeFilter('all');
-                setStaffFilter('all');
-                setStatusFilter('all');
-              }}
-              className="text-xs text-[#78350F] hover:text-[#5C2809] font-bold px-2 py-1 underline"
+          {/* Staff Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 uppercase">Staff:</span>
+            <select
+              id="monthly-work-staff-filter"
+              value={staffFilter}
+              onChange={(e) => setStaffFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#78350F] cursor-pointer"
             >
-              Clear Filters
-            </button>
-          )}
+              <option value="all">All Staff</option>
+              <option value="unassigned">Unassigned Only</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Quick Status Filters */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 shrink-0">
+            Quick Filter:
+          </span>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('all')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'all'
+                ? 'bg-[#78350F] text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            All ({statusCounts.all})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Completed')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Completed'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            Completed ({statusCounts.Completed})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Nil Filed')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Nil Filed'
+                ? 'bg-teal-600 text-white'
+                : 'bg-teal-50 text-teal-700 hover:bg-teal-100'
+            }`}
+          >
+            Nil Filed ({statusCounts['Nil Filed'] || 0})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Pending')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Pending' || statusFilter === 'All Pending'
+                ? 'bg-amber-600 text-white'
+                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            }`}
+          >
+            All Pending ({statusCounts['All Pending']})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Data Received')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Data Received'
+                ? 'bg-blue-600 text-white'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+            }`}
+          >
+            Data Received ({statusCounts['Data Received'] || 0})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Bill Pending')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Bill Pending'
+                ? 'bg-orange-600 text-white'
+                : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
+            }`}
+          >
+            Bill Pending ({statusCounts['Bill Pending']})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Tax Payment Pending')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Tax Payment Pending'
+                ? 'bg-rose-600 text-white'
+                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+            }`}
+          >
+            Tax Pending ({statusCounts['Tax Payment Pending']})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Client Delay')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Client Delay'
+                ? 'bg-red-600 text-white'
+                : 'bg-red-50 text-red-700 hover:bg-red-100'
+            }`}
+          >
+            Client Delay ({statusCounts['Client Delay'] || 0})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Not Started')}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
+              statusFilter === 'Not Started'
+                ? 'bg-slate-700 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Not Started ({statusCounts['Not Started']})
+          </button>
         </div>
       </div>
 
-      {/* Custom Selection Action Strip (When rows are selected) */}
+      {/* Selected Items Floating Action Bar */}
       {selectedClientIds.size > 0 && (
-        <div className="bg-[#FAF6F0] border-2 border-[#78350F] rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-fadeIn">
+        <div className="bg-[#FAF6F0] border border-[#E8DCC4] p-3 rounded-2xl flex items-center justify-between animate-in fade-in duration-200 shadow-sm">
           <div className="flex items-center gap-2">
-            <span className="flex h-2.5 w-2.5 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#78350F] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#78350F]"></span>
+            <span className="w-6 h-6 rounded-full bg-[#78350F] text-white text-xs font-bold flex items-center justify-center">
+              {selectedClientIds.size}
             </span>
             <span className="text-xs font-bold text-[#78350F]">
-              {selectedClientIds.size} client{selectedClientIds.size > 1 ? 's' : ''} specifically selected
-            </span>
-            <span className="text-[11px] text-slate-500 hidden sm:inline">
-              (Exporting will generate report for these selected records only)
+              Selected Client(s) for Bulk Action / Export
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleToggleSelectAll}
-              className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-[#E8DCC4] px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-            >
-              {isAllFilteredSelected ? 'Deselect Filtered' : `Select All Filtered (${filteredClients.length})`}
-            </button>
-            <button
               onClick={handleClearSelection}
-              className="text-xs font-semibold text-rose-700 hover:text-rose-900 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+              className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
             >
               Clear
             </button>
@@ -669,7 +896,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
         </div>
       )}
 
-      {/* Monthly Work Table */}
+      {/* MONTHLY WORK TABLE */}
       <div className="bg-white rounded-2xl border border-[#E8DCC4] shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
@@ -680,7 +907,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                     type="button"
                     onClick={handleToggleSelectAll}
                     title={isAllFilteredSelected ? 'Deselect All Filtered' : 'Select All Filtered'}
-                    className="text-slate-600 hover:text-slate-900 transition-colors p-1"
+                    className="text-slate-600 hover:text-slate-900 transition-colors p-1 cursor-pointer"
                   >
                     {isAllFilteredSelected ? (
                       <CheckSquare className="w-4 h-4 text-[#78350F]" />
@@ -691,11 +918,11 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                     )}
                   </button>
                 </th>
-                <th className="px-4 py-3" style={{ width: '26%' }}>Client / Contact</th>
-                <th className="px-4 py-3" style={{ width: '14%' }}>Category / Staff</th>
-                <th className="px-4 py-3" style={{ width: '20%' }}>Compliance Status</th>
-                <th className="px-4 py-3" style={{ width: '26%' }}>Filing Note</th>
-                <th className="px-4 py-3 text-right" style={{ width: '10%' }}>Action</th>
+                <th className="px-3 py-3 w-64">Client / Contact Info</th>
+                <th className="px-3 py-3 w-32">Category / Staff</th>
+                <th className="px-3 py-3 min-w-[250px] w-64">GST Status</th>
+                <th className="px-3 py-3 min-w-[320px]">Client Remark / Filing Note</th>
+                <th className="px-3 py-3 text-right w-28">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -722,12 +949,17 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                   // Status background styling for selector
                   const statusBgMap: Record<WorkStatus, string> = {
                     Completed: 'bg-emerald-50 text-emerald-800 border-emerald-300',
-                    'Not Started': 'bg-slate-50 text-slate-700 border-slate-300',
-                    Pending: 'bg-amber-50 text-amber-800 border-amber-300',
+                    'Nil Filed': 'bg-teal-50 text-teal-800 border-teal-300',
+                    'Data Received': 'bg-blue-50 text-blue-800 border-blue-300',
+                    'In Process': 'bg-indigo-50 text-indigo-800 border-indigo-300',
+                    'Challan Generated': 'bg-purple-50 text-purple-800 border-purple-300',
                     'Bill Pending': 'bg-orange-50 text-orange-800 border-orange-300',
                     'Tax Payment Pending': 'bg-rose-50 text-rose-800 border-rose-300',
-                    'Documents Pending': 'bg-purple-50 text-purple-800 border-purple-300',
+                    'Documents Pending': 'bg-amber-50 text-amber-800 border-amber-300',
                     'Client Response Pending': 'bg-cyan-50 text-cyan-800 border-cyan-300',
+                    'Client Delay': 'bg-red-50 text-red-800 border-red-300',
+                    'Not Started': 'bg-slate-50 text-slate-700 border-slate-300',
+                    Pending: 'bg-amber-50 text-amber-800 border-amber-300',
                     Other: 'bg-slate-50 text-slate-700 border-slate-300',
                   };
 
@@ -749,7 +981,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                       </td>
 
                       {/* Client / Firm Name & Permanent Mobile 1 and Mobile 2 */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {client.file_no && (
                             <span className="font-mono text-[10px] font-bold text-[#78350F] bg-[#FAF6F0] px-1.5 py-0.5 rounded border border-[#E8DCC4]" title={`File No: ${client.file_no}`}>
@@ -774,7 +1006,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                             {client.gstin}
                           </span>
                           {client.client_name && (
-                            <span className="text-[11px] text-slate-500 truncate max-w-[120px]">
+                            <span className="text-[11px] text-slate-500 truncate max-w-[130px]">
                               {client.client_name}
                             </span>
                           )}
@@ -782,7 +1014,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                       </td>
 
                       {/* Category & Staff */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <div>
                           {category === 'Composition' ? (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-purple-100 text-purple-900 border border-purple-200">
@@ -804,18 +1036,18 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                         </div>
                       </td>
 
-                      {/* Compliance Status Selector */}
-                      <td className="px-4 py-3">
+                      {/* Compliance GST Status Selector */}
+                      <td className="px-3 py-3 min-w-[250px] w-64">
                         <select
                           id={`work-status-select-${client.id}`}
                           value={currentStatus}
                           onChange={(e) => handleStatusChange(client.id, e.target.value as WorkStatus)}
-                          className={`w-full font-bold text-xs rounded-xl px-2.5 py-1.5 border focus:outline-none focus:ring-2 focus:ring-[#78350F] cursor-pointer ${
-                            statusBgMap[currentStatus]
+                          className={`w-full font-bold text-xs rounded-xl px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-[#78350F] cursor-pointer shadow-2xs ${
+                            statusBgMap[currentStatus] || 'bg-slate-50 text-slate-700 border-slate-300'
                           }`}
                         >
                           {STATUS_OPTIONS.map((opt) => (
-                            <option key={opt} value={opt} className="bg-white text-slate-800 font-normal">
+                            <option key={opt} value={opt} className="bg-white text-slate-800 font-medium py-1">
                               {opt}
                             </option>
                           ))}
@@ -828,31 +1060,51 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                         )}
                       </td>
 
-                      {/* Filing Note Input */}
-                      <td className="px-4 py-3">
-                        <input
-                          id={`work-remark-input-${client.id}`}
-                          type="text"
-                          placeholder="+ Add Filing Note..."
-                          value={currentRemark}
-                          onChange={(e) => handleRemarkChange(client.id, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveRow(client.id);
-                          }}
-                          className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white transition-all"
-                        />
+                      {/* Large, Long Client Remark / Filing Note Entry Box */}
+                      <td className="px-3 py-3 min-w-[320px]">
+                        <div className="space-y-1.5">
+                          <textarea
+                            id={`work-remark-input-${client.id}`}
+                            rows={2}
+                            placeholder="Type client remark / filing note..."
+                            value={currentRemark}
+                            onChange={(e) => handleRemarkChange(client.id, e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white resize-y min-h-[52px] leading-relaxed transition-all shadow-2xs"
+                          />
+                          {/* Quick English Remark Presets */}
+                          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
+                            <span className="text-[10px] text-slate-400 font-bold shrink-0">Quick:</span>
+                            {REMARK_PRESETS.slice(0, 4).map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => {
+                                  const updatedRemark = currentRemark
+                                    ? `${currentRemark} | ${preset}`
+                                    : preset;
+                                  handleRemarkChange(client.id, updatedRemark);
+                                }}
+                                className="text-[10px] px-1.5 py-0.5 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-900 rounded border border-slate-200 hover:border-amber-300 truncate max-w-[140px] shrink-0 cursor-pointer font-medium"
+                                title={preset}
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </td>
 
-                      {/* Action */}
-                      <td className="px-4 py-3 text-right">
+                      {/* Action: Save Button */}
+                      <td className="px-3 py-3 text-right whitespace-nowrap">
                         <button
                           id={`work-save-row-btn-${client.id}`}
                           onClick={() => handleSaveRow(client.id)}
-                          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                             isSaved
                               ? 'bg-emerald-600 text-white shadow-xs'
                               : 'bg-[#FAF6F0] text-[#78350F] hover:bg-[#78350F] hover:text-white border border-[#E8DCC4]'
                           }`}
+                          title="Save Status & Remark"
                         >
                           {isSaved ? (
                             <>
@@ -878,4 +1130,3 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
     </div>
   );
 };
-

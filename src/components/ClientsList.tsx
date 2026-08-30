@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ShieldAlert,
   Landmark,
+  Calculator,
 } from 'lucide-react';
 
 interface ClientsListProps {
@@ -35,6 +36,7 @@ interface ClientsListProps {
   onExportCSV: () => void;
   onNavigateToMonthlyWork: (clientGSTIN?: string) => void;
   onNavigateToBankTurnover?: (clientId: number) => void;
+  onNavigateToGstTurnover?: (clientId: number) => void;
 }
 
 export const getClientCategory = (category?: string): 'Normal' | 'Composition' | 'QRMP' => {
@@ -60,6 +62,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
   onExportCSV,
   onNavigateToMonthlyWork,
   onNavigateToBankTurnover,
+  onNavigateToGstTurnover,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterScheme, setFilterScheme] = useState('all');
@@ -162,12 +165,17 @@ export const ClientsList: React.FC<ClientsListProps> = ({
   const getStatusBadge = (status: WorkStatus) => {
     const styleMap: Record<WorkStatus, string> = {
       Completed: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'Nil Filed': 'bg-teal-100 text-teal-800 border-teal-200',
+      'Data Received': 'bg-blue-100 text-blue-800 border-blue-200',
+      'In Process': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'Challan Generated': 'bg-purple-100 text-purple-800 border-purple-200',
       'Not Started': 'bg-slate-100 text-slate-700 border-slate-200',
       Pending: 'bg-amber-100 text-amber-800 border-amber-200',
       'Bill Pending': 'bg-orange-100 text-orange-800 border-orange-200',
       'Tax Payment Pending': 'bg-rose-100 text-rose-800 border-rose-200',
-      'Documents Pending': 'bg-purple-100 text-purple-800 border-purple-200',
+      'Documents Pending': 'bg-amber-100 text-amber-800 border-amber-200',
       'Client Response Pending': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      'Client Delay': 'bg-red-100 text-red-800 border-red-200',
       Other: 'bg-slate-100 text-slate-700 border-slate-200',
     };
     return (
@@ -477,6 +485,17 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+
+                          {onNavigateToGstTurnover && (
+                            <button
+                              id={`client-turnover-btn-${client.id}`}
+                              onClick={() => onNavigateToGstTurnover(client.id)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#78350F] hover:bg-[#FAF6F0] transition-colors"
+                              title="Enter / Edit 12-Month GST Turnover"
+                            >
+                              <Calculator className="w-3.5 h-3.5 text-amber-700" />
+                            </button>
+                          )}
 
                           {onNavigateToBankTurnover && (
                             <button

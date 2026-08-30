@@ -674,7 +674,7 @@ export const generateMonthlyWorkReportPDF = (
   financialYear: FinancialYear,
   items: MonthlyWorkExportItem[],
   filterInfo: MonthlyWorkFilterInfo,
-  companyName: string = 'CA RISHAB JAISWAL - TAX & GST PORTAL'
+  companyName: string = 'CA RISHABH JAISWAL & ASSOCIATES'
 ): void => {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -973,4 +973,467 @@ export const generateMonthlyWorkReportCSV = (
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+export interface AllClientsGstTurnoverExportData {
+  client: Client;
+  fileNo: string;
+  firmName: string;
+  gstin: string;
+  clientName: string;
+  mobile: string;
+  gstType: string;
+  staffName: string;
+  monthly: Record<string, { taxable: number; exempt: number; total: number }>;
+  quarterly: { q1: number; q2: number; q3: number; q4: number };
+  annualTaxable: number;
+  annualExempt: number;
+  annualTotal: number;
+}
+
+/**
+ * Generates professional Landscape 12-Month GST Turnover PDF Report for All Clients
+ */
+export const generateAllClientsGstTurnoverPDF = (
+  clientsData: AllClientsGstTurnoverExportData[],
+  financialYear: FinancialYear,
+  companyName: string = 'TaxPro GST Consultancy & Services'
+): void => {
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const today = new Date().toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+  const nowTime = new Date().toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const primaryColor: [number, number, number] = [120, 53, 15]; // #78350F
+  const headerBg: [number, number, number] = [250, 246, 240]; // #FAF6F0
+
+  // Header Banner
+  let currentY = 10;
+  doc.setFillColor(...primaryColor);
+  doc.rect(10, currentY, pageWidth - 20, 18, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(255, 255, 255);
+  doc.text(companyName.toUpperCase(), pageWidth / 2, currentY + 6.5, { align: 'center' });
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    `ALL CLIENTS 12-MONTH GST TURNOVER REPORT (APRIL - MARCH) • FINANCIAL YEAR ${financialYear.display_name}`,
+    pageWidth / 2,
+    currentY + 13.5,
+    { align: 'center' }
+  );
+
+  currentY += 22;
+
+  // Portfolio KPIs Summary Bar
+  const totalClients = clientsData.length;
+  const clientsWithSales = clientsData.filter((c) => c.annualTotal > 0).length;
+  const grandTaxable = clientsData.reduce((sum, c) => sum + c.annualTaxable, 0);
+  const grandExempt = clientsData.reduce((sum, c) => sum + c.annualExempt, 0);
+  const grandTotal = clientsData.reduce((sum, c) => sum + c.annualTotal, 0);
+
+  doc.setFillColor(...headerBg);
+  doc.setDrawColor(212, 195, 163);
+  doc.roundedRect(10, currentY, pageWidth - 20, 14, 2, 2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(120, 53, 15);
+  doc.text(`PORTFOLIO SUMMARY: ${totalClients} CLIENTS (${clientsWithSales} Active with Sales)`, 14, currentY + 5.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(51, 65, 85);
+  doc.text(
+    `Total Taxable: ${formatINRNumber(grandTaxable)}  |  Total Exempt: ${formatINRNumber(grandExempt)}  |  Grand Annual Turnover: ${formatINRNumber(grandTotal)}`,
+    14,
+    currentY + 10.5
+  );
+  doc.text(`Generated: ${today} at ${nowTime}`, pageWidth - 14, currentY + 8, { align: 'right' });
+
+  currentY += 18;
+
+  // 12-Month Table Columns
+  const head = [
+    [
+      '#',
+      'File',
+      'Firm Name',
+      'GSTIN',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Taxable',
+      'Exempt',
+      'Grand Total',
+    ],
+  ];
+
+  const body = clientsData.map((c, i) => {
+    return [
+      String(i + 1),
+      c.fileNo || '—',
+      c.firmName,
+      c.gstin,
+      c.monthly['April']?.total > 0 ? (c.monthly['April'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['May']?.total > 0 ? (c.monthly['May'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['June']?.total > 0 ? (c.monthly['June'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['July']?.total > 0 ? (c.monthly['July'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['August']?.total > 0 ? (c.monthly['August'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['September']?.total > 0 ? (c.monthly['September'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['October']?.total > 0 ? (c.monthly['October'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['November']?.total > 0 ? (c.monthly['November'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['December']?.total > 0 ? (c.monthly['December'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['January']?.total > 0 ? (c.monthly['January'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['February']?.total > 0 ? (c.monthly['February'].total / 1000).toFixed(1) + 'k' : '—',
+      c.monthly['March']?.total > 0 ? (c.monthly['March'].total / 1000).toFixed(1) + 'k' : '—',
+      formatINRNumber(c.annualTaxable),
+      formatINRNumber(c.annualExempt),
+      formatINRNumber(c.annualTotal),
+    ];
+  });
+
+  // Grand Total Row
+  body.push([
+    '',
+    '',
+    'PORTFOLIO GRAND TOTAL',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    formatINRNumber(grandTaxable),
+    formatINRNumber(grandExempt),
+    formatINRNumber(grandTotal),
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    head: head,
+    body: body,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [120, 53, 15],
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 6.5,
+      halign: 'center',
+    },
+    styles: {
+      fontSize: 6,
+      cellPadding: 1.2,
+      textColor: [30, 41, 59],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 7 },
+      1: { halign: 'center', cellWidth: 10 },
+      2: { halign: 'left', fontStyle: 'bold', cellWidth: 36 },
+      3: { halign: 'left', cellWidth: 24 },
+      4: { halign: 'right', cellWidth: 11 },
+      5: { halign: 'right', cellWidth: 11 },
+      6: { halign: 'right', cellWidth: 11 },
+      7: { halign: 'right', cellWidth: 11 },
+      8: { halign: 'right', cellWidth: 11 },
+      9: { halign: 'right', cellWidth: 11 },
+      10: { halign: 'right', cellWidth: 11 },
+      11: { halign: 'right', cellWidth: 11 },
+      12: { halign: 'right', cellWidth: 11 },
+      13: { halign: 'right', cellWidth: 11 },
+      14: { halign: 'right', cellWidth: 11 },
+      15: { halign: 'right', cellWidth: 11 },
+      16: { halign: 'right', fontStyle: 'bold', cellWidth: 20 },
+      17: { halign: 'right', fontStyle: 'bold', cellWidth: 18 },
+      18: { halign: 'right', fontStyle: 'bold', cellWidth: 23 },
+    },
+    didParseCell: (hookData) => {
+      // Grand total row styling
+      if (hookData.row.index === body.length - 1) {
+        hookData.cell.styles.fillColor = [250, 246, 240];
+        hookData.cell.styles.fontStyle = 'bold';
+        hookData.cell.styles.textColor = [120, 53, 15];
+      }
+    },
+    didDrawPage: (hookData) => {
+      // Footer on every page
+      const pageNumber = hookData.pageNumber;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        `Generated from GST Management System • Page ${pageNumber}`,
+        pageWidth / 2,
+        pageHeight - 5,
+        { align: 'center' }
+      );
+    },
+  });
+
+  const fileName = `All_Clients_12M_GST_Turnover_${sanitizeFileName(financialYear.display_name)}_${new Date().toISOString().split('T')[0]}.pdf`;
+  doc.save(fileName);
+};
+
+export interface TopClientExportRow {
+  rank: number;
+  fileNo?: string;
+  firmName: string;
+  clientName?: string;
+  gstin?: string;
+  scheme: string;
+  taxableTurnover: number;
+  exemptTurnover: number;
+  totalTurnover: number;
+  bankTurnover?: number;
+  percentageShare: number;
+  notes?: string;
+}
+
+/**
+ * Generates an executive PDF report for Top Clients by GST & Bank Turnover
+ */
+export const generateTopClientsTurnoverPDF = (
+  items: TopClientExportRow[],
+  financialYear: FinancialYear,
+  reportTitle: string = 'TOP CLIENTS GST TURNOVER STATEMENT',
+  summary: {
+    totalTaxable: number;
+    totalExempt: number;
+    grandTotal: number;
+    totalBankTurnover: number;
+    portfolioTotal: number;
+    portfolioShare: number;
+  },
+  companyName: string = 'TaxPro GST Consultancy & Services'
+): void => {
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const today = new Date().toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+
+  const primaryColor: [number, number, number] = [15, 23, 42]; // Slate 900
+  const accentColor: [number, number, number] = [120, 53, 15]; // Amber 900
+  let currentY = 12;
+
+  // Header Banner
+  doc.setFillColor(...primaryColor);
+  doc.rect(14, currentY, pageWidth - 28, 18, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(255, 255, 255);
+  doc.text(companyName.toUpperCase(), pageWidth / 2, currentY + 7, { align: 'center' });
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(226, 232, 240);
+  doc.text(
+    `${reportTitle.toUpperCase()} • FINANCIAL YEAR: FY ${financialYear.display_name} • DATE: ${today}`,
+    pageWidth / 2,
+    currentY + 13,
+    { align: 'center' }
+  );
+
+  currentY += 23;
+
+  // Executive KPI summary boxes
+  const boxWidth = (pageWidth - 28 - 12) / 4;
+  const boxHeight = 15;
+
+  // Box 1: Clients Selected
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(14, currentY, boxWidth, boxHeight, 1.5, 1.5, 'FD');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL CLIENTS IN RANKING', 14 + boxWidth / 2, currentY + 5, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${items.length} Clients`, 14 + boxWidth / 2, currentY + 11.5, { align: 'center' });
+
+  // Box 2: Total Taxable Turnover
+  const box2X = 14 + boxWidth + 4;
+  doc.roundedRect(box2X, currentY, boxWidth, boxHeight, 1.5, 1.5, 'FD');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL TAXABLE SALES (INR)', box2X + boxWidth / 2, currentY + 5, { align: 'center' });
+  doc.setFontSize(10.5);
+  doc.setTextColor(37, 99, 235);
+  doc.text(formatINRNumber(summary.totalTaxable), box2X + boxWidth / 2, currentY + 11.5, { align: 'center' });
+
+  // Box 3: Total Combined GST Turnover
+  const box3X = box2X + boxWidth + 4;
+  doc.setFillColor(250, 246, 240);
+  doc.setDrawColor(212, 195, 163);
+  doc.roundedRect(box3X, currentY, boxWidth, boxHeight, 1.5, 1.5, 'FD');
+  doc.setFontSize(7);
+  doc.setTextColor(120, 53, 15);
+  doc.text('GRAND GST TURNOVER (12M)', box3X + boxWidth / 2, currentY + 5, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(120, 53, 15);
+  doc.text(formatINRNumber(summary.grandTotal), box3X + boxWidth / 2, currentY + 11.5, { align: 'center' });
+
+  // Box 4: Portfolio Share %
+  const box4X = box3X + boxWidth + 4;
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(187, 247, 208);
+  doc.roundedRect(box4X, currentY, boxWidth, boxHeight, 1.5, 1.5, 'FD');
+  doc.setFontSize(7);
+  doc.setTextColor(22, 101, 52);
+  doc.text('SHARE OF FIRM PORTFOLIO', box4X + boxWidth / 2, currentY + 5, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setTextColor(22, 101, 52);
+  doc.text(`${summary.portfolioShare.toFixed(1)}% of Portfolio`, box4X + boxWidth / 2, currentY + 11.5, { align: 'center' });
+
+  currentY += 19;
+
+  // Build table data
+  const head = [
+    [
+      'Rank',
+      'File #',
+      'Firm Name / Business Account',
+      'GSTIN',
+      'Scheme',
+      'Taxable Sales (Rs.)',
+      'Exempt Sales (Rs.)',
+      'Total GST Turnover (Rs.)',
+      'Bank Turnover (Rs.)',
+      '% Share',
+      'Remarks / Category',
+    ],
+  ];
+
+  const body: (string | number)[][] = items.map((row) => [
+    `#${row.rank}`,
+    row.fileNo || '—',
+    row.clientName ? `${row.firmName}\n(${row.clientName})` : row.firmName,
+    row.gstin || '—',
+    row.scheme,
+    Number(row.taxableTurnover || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    Number(row.exemptTurnover || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    Number(row.totalTurnover || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    Number(row.bankTurnover || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    `${row.percentageShare.toFixed(2)}%`,
+    row.notes || '—',
+  ]);
+
+  // Add Grand Total Row
+  body.push([
+    'TOTAL',
+    '—',
+    `TOTAL OF ${items.length} SELECTED TOP CLIENTS`,
+    '—',
+    '—',
+    Number(summary.totalTaxable || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    Number(summary.totalExempt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    Number(summary.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    Number(summary.totalBankTurnover || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    `${summary.portfolioShare.toFixed(2)}%`,
+    `Portfolio: ${formatINRNumber(summary.portfolioTotal)}`,
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    head: head,
+    body: body,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'center',
+    },
+    styles: {
+      fontSize: 7,
+      cellPadding: 1.5,
+      textColor: [30, 41, 59],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+    },
+    columnStyles: {
+      0: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
+      1: { halign: 'center', cellWidth: 14 },
+      2: { halign: 'left', fontStyle: 'bold', cellWidth: 58 },
+      3: { halign: 'center', fontStyle: 'normal', cellWidth: 32 },
+      4: { halign: 'center', cellWidth: 18 },
+      5: { halign: 'right', cellWidth: 26 },
+      6: { halign: 'right', cellWidth: 24 },
+      7: { halign: 'right', fontStyle: 'bold', cellWidth: 28 },
+      8: { halign: 'right', cellWidth: 26 },
+      9: { halign: 'center', fontStyle: 'bold', cellWidth: 15 },
+      10: { halign: 'left', cellWidth: 17 },
+    },
+    didParseCell: (hookData) => {
+      // Grand total row styling
+      if (hookData.row.index === body.length - 1) {
+        hookData.cell.styles.fillColor = [250, 246, 240];
+        hookData.cell.styles.fontStyle = 'bold';
+        hookData.cell.styles.textColor = [120, 53, 15];
+      }
+    },
+    didDrawPage: (hookData) => {
+      const pageNumber = hookData.pageNumber;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        `Generated from GST Master System • Page ${pageNumber}`,
+        pageWidth / 2,
+        pageHeight - 5,
+        { align: 'center' }
+      );
+    },
+  });
+
+  const sanitizedTitle = sanitizeFileName(reportTitle);
+  const fileName = `${sanitizedTitle}_${sanitizeFileName(financialYear.display_name)}_${new Date().toISOString().split('T')[0]}.pdf`;
+  doc.save(fileName);
+};
+
 

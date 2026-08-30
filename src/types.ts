@@ -55,10 +55,15 @@ export type WorkStatus =
   | 'Not Started'
   | 'Pending'
   | 'Completed'
+  | 'Nil Filed'
+  | 'Data Received'
+  | 'In Process'
+  | 'Challan Generated'
   | 'Bill Pending'
   | 'Tax Payment Pending'
   | 'Documents Pending'
   | 'Client Response Pending'
+  | 'Client Delay'
   | 'Other';
 
 export interface MonthlyWork {
@@ -155,10 +160,15 @@ export const WORK_STATUSES: WorkStatus[] = [
   'Not Started',
   'Pending',
   'Completed',
+  'Nil Filed',
+  'Data Received',
+  'In Process',
+  'Challan Generated',
   'Bill Pending',
   'Tax Payment Pending',
   'Documents Pending',
   'Client Response Pending',
+  'Client Delay',
   'Other',
 ];
 
@@ -181,6 +191,30 @@ export const STATUS_COLORS: Record<WorkStatus, { bg: string; text: string; borde
     border: 'border-emerald-200',
     badge: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
   },
+  'Nil Filed': {
+    bg: 'bg-teal-50',
+    text: 'text-teal-700',
+    border: 'border-teal-200',
+    badge: 'bg-teal-100 text-teal-800 border border-teal-300',
+  },
+  'Data Received': {
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    border: 'border-blue-200',
+    badge: 'bg-blue-100 text-blue-800 border border-blue-300',
+  },
+  'In Process': {
+    bg: 'bg-indigo-50',
+    text: 'text-indigo-700',
+    border: 'border-indigo-200',
+    badge: 'bg-indigo-100 text-indigo-800 border border-indigo-300',
+  },
+  'Challan Generated': {
+    bg: 'bg-purple-50',
+    text: 'text-purple-700',
+    border: 'border-purple-200',
+    badge: 'bg-purple-100 text-purple-800 border border-purple-300',
+  },
   'Bill Pending': {
     bg: 'bg-orange-50',
     text: 'text-orange-700',
@@ -194,16 +228,22 @@ export const STATUS_COLORS: Record<WorkStatus, { bg: string; text: string; borde
     badge: 'bg-rose-100 text-rose-800 border border-rose-300',
   },
   'Documents Pending': {
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-200',
-    badge: 'bg-blue-100 text-blue-800 border border-blue-300',
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    border: 'border-amber-200',
+    badge: 'bg-amber-100 text-amber-800 border border-amber-300',
   },
   'Client Response Pending': {
-    bg: 'bg-purple-50',
-    text: 'text-purple-700',
-    border: 'border-purple-200',
-    badge: 'bg-purple-100 text-purple-800 border border-purple-300',
+    bg: 'bg-cyan-50',
+    text: 'text-cyan-700',
+    border: 'border-cyan-200',
+    badge: 'bg-cyan-100 text-cyan-800 border border-cyan-300',
+  },
+  'Client Delay': {
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    border: 'border-red-200',
+    badge: 'bg-red-100 text-red-800 border border-red-300',
   },
   'Other': {
     bg: 'bg-slate-50',

@@ -29,6 +29,7 @@ import { ClientFormModal } from './components/ClientFormModal';
 import { ClientProfileModal } from './components/ClientProfileModal';
 import { CsvImportModal } from './components/CsvImportModal';
 import { BankTurnover } from './components/BankTurnover';
+import { GstTurnoverEntry } from './components/GstTurnoverEntry';
 import { OfficeVisits } from './components/OfficeVisits/OfficeVisits';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, AlertCircle, Info, ShieldAlert, ArrowLeft } from 'lucide-react';
@@ -62,6 +63,7 @@ export default function App() {
   const [monthlyWorkStatusFilter, setMonthlyWorkStatusFilter] = useState('all');
   const [monthlyWorkSchemeFilter, setMonthlyWorkSchemeFilter] = useState('all');
   const [selectedBankClientId, setSelectedBankClientId] = useState<number | null>(null);
+  const [selectedTurnoverClientId, setSelectedTurnoverClientId] = useState<number | null>(null);
   const [isRefreshingPortal, setIsRefreshingPortal] = useState(false);
 
   // Toasts
@@ -681,6 +683,10 @@ export default function App() {
                 setSelectedBankClientId(clientId);
                 setActiveTab('bank-turnover');
               }}
+              onNavigateToGstTurnover={(clientId) => {
+                setSelectedTurnoverClientId(clientId);
+                setActiveTab('gst-turnover-entry');
+              }}
             />
           )}
 
@@ -725,6 +731,19 @@ export default function App() {
               initialStatusFilter={monthlyWorkStatusFilter}
               initialSchemeFilter={monthlyWorkSchemeFilter}
               onExportCSV={handleExportMonthlyCSV}
+              onRefresh={handleRefreshPortal}
+            />
+          )}
+
+          {(activeTab === 'gst-turnover-entry' || activeTab === 'gst-turnover-matrix') && (
+            <GstTurnoverEntry
+              clients={clients}
+              financialYears={financialYears}
+              selectedFY={selectedFY}
+              currentUser={currentUser}
+              users={users}
+              initialClientId={selectedTurnoverClientId}
+              onSelectFY={handleSelectFY}
               onRefresh={handleRefreshPortal}
             />
           )}
@@ -892,6 +911,11 @@ export default function App() {
           setViewingClient(null);
           setSelectedBankClientId(clientId);
           setActiveTab('bank-turnover');
+        }}
+        onNavigateToGstTurnover={(clientId) => {
+          setViewingClient(null);
+          setSelectedTurnoverClientId(clientId);
+          setActiveTab('gst-turnover-entry');
         }}
       />
 
