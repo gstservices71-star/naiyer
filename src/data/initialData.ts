@@ -75,6 +75,7 @@ export const initialFinancialYears: FinancialYear[] = generate30YearsFYs();
 export const initialClients: Client[] = [
   {
     id: 101,
+    file_no: 'F-101',
     gstin: '27AABCU9603R1ZM',
     firm_name: 'Apex Infotech Solutions',
     client_name: 'Rajesh Nair',
@@ -95,6 +96,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 102,
+    file_no: 'F-102',
     gstin: '24AAACP4589K1Z4',
     firm_name: 'Bharat Chemical & Fertilizers',
     client_name: 'Dinesh Patel',
@@ -115,6 +117,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 103,
+    file_no: 'F-103',
     gstin: '07AAACA1234B1Z9',
     firm_name: 'Shree Ganesh Kirana Store',
     client_name: 'Ganesh Gupta',
@@ -135,6 +138,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 104,
+    file_no: 'F-104',
     gstin: '29AAACC7890D1Z2',
     firm_name: 'Zenith Logistics & Transport',
     client_name: 'Venkatesh Rao',
@@ -155,6 +159,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 105,
+    file_no: 'F-105',
     gstin: '08AAACB9999P1Z8',
     firm_name: 'Marwar Handicrafts Emporium',
     client_name: 'Mahendra Singh',
@@ -175,6 +180,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 106,
+    file_no: 'F-106',
     gstin: '27AABCT5555L1Z1',
     firm_name: 'Modern Precision Engineering',
     client_name: 'Prakash Deshmukh',
@@ -195,6 +201,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 107,
+    file_no: 'F-107',
     gstin: '09AAACR3322E1Z6',
     firm_name: 'Sharda Medical & Surgical Agencies',
     client_name: 'Alok Mishra',
@@ -215,6 +222,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 108,
+    file_no: 'F-108',
     gstin: '24AAACT8877J1Z0',
     firm_name: 'Surat Silk Sarees Palace',
     client_name: 'Jignesh Shah',
@@ -235,6 +243,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 109,
+    file_no: 'F-109',
     gstin: '27AAACG6644K1Z3',
     firm_name: 'Green Leaf Agro Exports',
     client_name: 'Sunil Patil',
@@ -255,6 +264,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 110,
+    file_no: 'F-110',
     gstin: '07AAACK7711N1Z5',
     firm_name: 'Khurana Electricals & Hardware',
     client_name: 'Harpreet Singh Khurana',
@@ -275,6 +285,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 111,
+    file_no: 'F-111',
     gstin: '33AAACT1199F1Z7',
     firm_name: 'Southern Spice Restaurant',
     client_name: 'K. Ramanathan',
@@ -295,6 +306,7 @@ export const initialClients: Client[] = [
   },
   {
     id: 112,
+    file_no: 'F-112',
     gstin: '27AAACB3344P1Z9',
     firm_name: 'Blue Star Pharma Distributing Co',
     client_name: 'Vikas Agarwal',

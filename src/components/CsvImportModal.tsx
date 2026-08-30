@@ -12,6 +12,7 @@ interface CsvImportModalProps {
 
 interface ParsedRow {
   rowNum: number;
+  file_no?: string;
   gstin: string;
   firm_name: string;
   client_name: string;
@@ -40,10 +41,10 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
 
   const downloadSampleCSV = () => {
     const csvContent =
-      'GSTIN,Firm Name,Client Name,Mobile,Email,Address,City,State,PIN,GST Type\n' +
-      '27AAAAA0000A1Z5,Apex Infotech Solutions,Rajesh Nair,9820123456,rajesh@apex.in,Shop 12 M.G Road,Pune,Maharashtra,411001,regular\n' +
-      '24BBBBB1111B2Z8,Omkar General Traders,Ketan Patel,9898123456,omkar@gmail.com,G-4 Ring Road,Surat,Gujarat,395002,composition\n' +
-      '07CCCCC2222C3Z1,Delhi Dynamics Pvt Ltd,Amit Sharma,9811122233,amit@delhidynamics.com,Connaught Place,New Delhi,Delhi,110001,regular\n';
+      'File No,GSTIN,Firm Name,Client Name,Mobile,Email,Address,City,State,PIN,GST Type\n' +
+      'F-101,27AAAAA0000A1Z5,Apex Infotech Solutions,Rajesh Nair,9820123456,rajesh@apex.in,Shop 12 M.G Road,Pune,Maharashtra,411001,regular\n' +
+      'F-102,24BBBBB1111B2Z8,Omkar General Traders,Ketan Patel,9898123456,omkar@gmail.com,G-4 Ring Road,Surat,Gujarat,395002,composition\n' +
+      'F-103,07CCCCC2222C3Z1,Delhi Dynamics Pvt Ltd,Amit Sharma,9811122233,amit@delhidynamics.com,Connaught Place,New Delhi,Delhi,110001,regular\n';
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -78,6 +79,21 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
       return;
     }
 
+    const headerCols = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+    const fileNoIndex = headerCols.findIndex((h) => h.includes('file'));
+    const gstinIndex = headerCols.findIndex((h) => h.includes('gstin'));
+    const firmIndex = headerCols.findIndex((h) => h.includes('firm'));
+    const nameIndex = headerCols.findIndex((h) => h.includes('client') || h.includes('name'));
+    const mobileIndex = headerCols.findIndex((h) => h.includes('mobile') || h.includes('phone'));
+    const emailIndex = headerCols.findIndex((h) => h.includes('email'));
+    const addressIndex = headerCols.findIndex((h) => h.includes('address'));
+    const cityIndex = headerCols.findIndex((h) => h.includes('city'));
+    const stateIndex = headerCols.findIndex((h) => h.includes('state'));
+    const pinIndex = headerCols.findIndex((h) => h.includes('pin'));
+    const schemeIndex = headerCols.findIndex((h) => h.includes('type') || h.includes('scheme'));
+
+    const hasNamedHeader = gstinIndex !== -1;
+
     const existingGSTINs = new Set(existingClients.map((c) => c.gstin.toUpperCase()));
     const seenInFile = new Set<string>();
 
@@ -85,20 +101,64 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
-      // Simple CSV split handling
       const cols = line.split(',').map((c) => c.trim().replace(/^["']|["']$/g, ''));
-      if (cols.length < 3 || !cols[0]) continue;
+      if (cols.length < 2 || !cols.some(c => c.length > 0)) continue;
 
-      const gstin = cols[0].toUpperCase().trim();
-      const firm_name = cols[1] || '';
-      const client_name = cols[2] || '';
-      const mobile = cols[3] || '';
-      const email = cols[4] || '';
-      const address = cols[5] || '';
-      const city = cols[6] || '';
-      let state = cols[7] || '';
-      const pin_code = cols[8] || '';
-      const gst_type = cols[9]?.toLowerCase() === 'composition' ? 'composition' : 'regular';
+      let file_no = '';
+      let gstin = '';
+      let firm_name = '';
+      let client_name = '';
+      let mobile = '';
+      let email = '';
+      let address = '';
+      let city = '';
+      let state = '';
+      let pin_code = '';
+      let gst_type: 'regular' | 'composition' = 'regular';
+
+      if (hasNamedHeader) {
+        file_no = fileNoIndex !== -1 ? cols[fileNoIndex] || '' : '';
+        gstin = gstinIndex !== -1 ? (cols[gstinIndex] || '').toUpperCase().trim() : '';
+        firm_name = firmIndex !== -1 ? cols[firmIndex] || '' : '';
+        client_name = nameIndex !== -1 ? cols[nameIndex] || '' : '';
+        mobile = mobileIndex !== -1 ? cols[mobileIndex] || '' : '';
+        email = emailIndex !== -1 ? cols[emailIndex] || '' : '';
+        address = addressIndex !== -1 ? cols[addressIndex] || '' : '';
+        city = cityIndex !== -1 ? cols[cityIndex] || '' : '';
+        state = stateIndex !== -1 ? cols[stateIndex] || '' : '';
+        pin_code = pinIndex !== -1 ? cols[pinIndex] || '' : '';
+        if (schemeIndex !== -1 && cols[schemeIndex]?.toLowerCase() === 'composition') {
+          gst_type = 'composition';
+        }
+      } else {
+        // Fallback positional
+        if (cols[0]?.length <= 10 && !/^[0-9]{2}[A-Z]{5}/.test(cols[0])) {
+          file_no = cols[0] || '';
+          gstin = (cols[1] || '').toUpperCase().trim();
+          firm_name = cols[2] || '';
+          client_name = cols[3] || '';
+          mobile = cols[4] || '';
+          email = cols[5] || '';
+          address = cols[6] || '';
+          city = cols[7] || '';
+          state = cols[8] || '';
+          pin_code = cols[9] || '';
+          gst_type = cols[10]?.toLowerCase() === 'composition' ? 'composition' : 'regular';
+        } else {
+          gstin = (cols[0] || '').toUpperCase().trim();
+          firm_name = cols[1] || '';
+          client_name = cols[2] || '';
+          mobile = cols[3] || '';
+          email = cols[4] || '';
+          address = cols[5] || '';
+          city = cols[6] || '';
+          state = cols[7] || '';
+          pin_code = cols[8] || '';
+          gst_type = cols[9]?.toLowerCase() === 'composition' ? 'composition' : 'regular';
+        }
+      }
+
+      if (!gstin && !firm_name) continue;
 
       let isValid = true;
       let error = '';
@@ -128,6 +188,7 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
 
       rows.push({
         rowNum: i + 1,
+        file_no,
         gstin,
         firm_name,
         client_name,
@@ -153,6 +214,7 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     if (validRows.length === 0) return;
 
     const toImport = validRows.map((r) => ({
+      file_no: r.file_no || undefined,
       gstin: r.gstin,
       firm_name: r.firm_name,
       client_name: r.client_name,

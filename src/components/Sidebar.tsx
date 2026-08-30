@@ -122,8 +122,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id="sidebar-menu-scroll-panel"
           className="flex-1 overflow-y-auto custom-sidebar-scroll py-2 px-2 space-y-1 overscroll-contain"
         >
-          <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            Main Management
+          <div className="px-3 py-1 text-[10px] font-bold text-blue-300/80 uppercase tracking-wider flex items-center justify-between">
+            <span>CA OFFICE NAVIGATION</span>
           </div>
 
           {menuItems.map((item) => {

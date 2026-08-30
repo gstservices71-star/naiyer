@@ -19,6 +19,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
   users,
 }) => {
   const [formData, setFormData] = useState({
+    file_no: '',
     gstin: '',
     firm_name: '',
     client_name: '',
@@ -50,6 +51,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
   useEffect(() => {
     if (editClient) {
       setFormData({
+        file_no: editClient.file_no || '',
         gstin: editClient.gstin,
         firm_name: editClient.firm_name,
         client_name: editClient.client_name,
@@ -69,6 +71,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
       setGstinFeedback(validateGSTIN(editClient.gstin));
     } else {
       setFormData({
+        file_no: '',
         gstin: '',
         firm_name: '',
         client_name: '',
@@ -259,9 +262,23 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
             </div>
           </div>
 
-          {/* Row 2: Firm Name & Contact Person */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+          {/* Row 2: File No, Firm Name & Contact Person */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className="sm:col-span-3">
+              <label className="block font-bold text-slate-700 mb-1">
+                File No (फ़ाइल नं.)
+              </label>
+              <input
+                id="client-form-file-no-input"
+                type="text"
+                placeholder="e.g. F-101 or 12"
+                value={formData.file_no}
+                onChange={(e) => setFormData((prev) => ({ ...prev, file_no: e.target.value }))}
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
+              />
+            </div>
+
+            <div className="sm:col-span-5">
               <label className="block font-bold text-slate-700 mb-1">
                 Firm / Trade Name <span className="text-rose-500">*</span>
               </label>
@@ -276,7 +293,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
               />
             </div>
 
-            <div>
+            <div className="sm:col-span-4">
               <label className="block font-bold text-slate-700 mb-1">
                 Client Contact Person
               </label>

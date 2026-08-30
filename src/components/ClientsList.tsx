@@ -85,6 +85,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
       // Search term
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
+        const matchesFileNo = client.file_no ? client.file_no.toLowerCase().includes(query) : false;
         const matchesGSTIN = client.gstin.toLowerCase().includes(query);
         const matchesFirm = client.firm_name.toLowerCase().includes(query);
         const matchesName = client.client_name.toLowerCase().includes(query);
@@ -92,7 +93,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
         const matchesMobile2 = client.alternate_mobile ? client.alternate_mobile.includes(query) : false;
         const matchesRemark = client.notes ? client.notes.toLowerCase().includes(query) : false;
         const matchesCity = client.city?.toLowerCase().includes(query) || false;
-        if (!matchesGSTIN && !matchesFirm && !matchesName && !matchesMobile1 && !matchesMobile2 && !matchesRemark && !matchesCity) {
+        if (!matchesFileNo && !matchesGSTIN && !matchesFirm && !matchesName && !matchesMobile1 && !matchesMobile2 && !matchesRemark && !matchesCity) {
           return false;
         }
       }
@@ -240,7 +241,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
           <input
             id="clients-search-input"
             type="text"
-            placeholder="Search by GSTIN, Firm, Name, Phone, Remark..."
+            placeholder="Search by File No, GSTIN, Firm, Name, Phone, Remark..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -338,6 +339,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
           <table className="w-full text-left text-xs text-slate-700 min-w-[900px]">
             <thead className="bg-[#FAF6F0] border-b border-[#E8DCC4] text-[11px] font-bold text-[#78350F] uppercase tracking-wider">
               <tr>
+                <th className="px-3 py-3 text-center whitespace-nowrap">File No</th>
                 <th className="px-4 py-3">Client</th>
                 <th className="px-4 py-3">Mobile 1</th>
                 <th className="px-4 py-3">Mobile 2</th>
@@ -354,7 +356,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({
             <tbody className="divide-y divide-slate-100">
               {paginatedClients.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-10 text-slate-400">
+                  <td colSpan={10} className="text-center py-10 text-slate-400">
                     <Building className="w-8 h-8 mx-auto mb-2 text-[#C4A480]" />
                     <p className="font-semibold text-slate-600">No clients match your filter criteria.</p>
                     <p className="text-xs text-slate-400 mt-1">
@@ -373,6 +375,17 @@ export const ClientsList: React.FC<ClientsListProps> = ({
                       key={client.id}
                       className="hover:bg-[#FCF9F5] transition-colors group"
                     >
+                      {/* 0. File No */}
+                      <td className="px-3 py-3 text-center whitespace-nowrap">
+                        {client.file_no ? (
+                          <span className="font-mono text-xs font-bold text-[#78350F] bg-[#FAF6F0] px-2 py-0.5 rounded border border-[#E8DCC4]" title={`File No: ${client.file_no}`}>
+                            {client.file_no}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 font-mono">—</span>
+                        )}
+                      </td>
+
                       {/* 1. Client (Firm Name & Contact Person) */}
                       <td className="px-4 py-3">
                         <div

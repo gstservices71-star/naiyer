@@ -21,6 +21,7 @@ export type ClientStatus = 'active' | 'inactive';
 
 export interface Client {
   id: number;
+  file_no?: string;
   gstin: string;
   firm_name: string;
   client_name: string;

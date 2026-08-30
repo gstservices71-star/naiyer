@@ -75,7 +75,8 @@ export const generateClientReportPDF = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Client Name: ${data.client.firm_name}`, 18, currentY + 7);
+  const fileNoPrefix = data.client.file_no ? `[File #${data.client.file_no}] ` : '';
+  doc.text(`Client Name: ${fileNoPrefix}${data.client.firm_name}`, 18, currentY + 7);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -783,6 +784,7 @@ export const generateMonthlyWorkReportPDF = (
   // Table Data
   const tableHead = [
     '#',
+    'File No',
     'GSTIN',
     'Firm / Trade Name',
     'Contact Person & Mobile',
@@ -798,6 +800,7 @@ export const generateMonthlyWorkReportPDF = (
     const contactText = item.client.client_name ? `${item.client.client_name}\n${mobileStr}` : mobileStr || '-';
     return [
       String(index + 1),
+      item.client.file_no || '-',
       item.client.gstin || 'Unregistered',
       item.client.firm_name || 'N/A',
       contactText,
@@ -834,20 +837,21 @@ export const generateMonthlyWorkReportPDF = (
       fillColor: [248, 250, 252],
     },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 10, fontStyle: 'bold' },
-      1: { cellWidth: 34, fontStyle: 'bold', textColor: [15, 23, 42] },
-      2: { cellWidth: 55, fontStyle: 'bold' },
-      3: { cellWidth: 38 },
-      4: { cellWidth: 20 },
-      5: { cellWidth: 26 },
-      6: { cellWidth: 34, fontStyle: 'bold' },
-      7: { cellWidth: 48 },
-      8: { cellWidth: 22, fontSize: 6.5, textColor: [100, 116, 139] },
+      0: { halign: 'center', cellWidth: 8, fontStyle: 'bold' },
+      1: { cellWidth: 18, fontStyle: 'bold', textColor: [120, 53, 15] },
+      2: { cellWidth: 32, fontStyle: 'bold', textColor: [15, 23, 42] },
+      3: { cellWidth: 50, fontStyle: 'bold' },
+      4: { cellWidth: 36 },
+      5: { cellWidth: 18 },
+      6: { cellWidth: 24 },
+      7: { cellWidth: 32, fontStyle: 'bold' },
+      8: { cellWidth: 42 },
+      9: { cellWidth: 20, fontSize: 6.5, textColor: [100, 116, 139] },
     },
     margin: { left: 10, right: 10 },
     didParseCell: (data) => {
-      // Highlight Status Column (Index 6)
-      if (data.section === 'body' && data.column.index === 6) {
+      // Highlight Status Column (Index 7)
+      if (data.section === 'body' && data.column.index === 7) {
         const val = String(data.cell.raw || '');
         if (val === 'Completed') {
           data.cell.styles.textColor = [5, 150, 105]; // Emerald
@@ -912,6 +916,7 @@ export const generateMonthlyWorkReportCSV = (
 ): void => {
   const header = [
     'S.No',
+    'File No',
     'GSTIN',
     'Firm Name',
     'Client / Proprietor Name',
@@ -930,6 +935,7 @@ export const generateMonthlyWorkReportCSV = (
   const rows = items.map((item, index) => {
     return [
       String(index + 1),
+      `"${(item.client.file_no || '').replace(/"/g, '""')}"`,
       `"${(item.client.gstin || '').replace(/"/g, '""')}"`,
       `"${(item.client.firm_name || '').replace(/"/g, '""')}"`,
       `"${(item.client.client_name || '').replace(/"/g, '""')}"`,

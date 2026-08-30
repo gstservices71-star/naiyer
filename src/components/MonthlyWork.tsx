@@ -167,15 +167,16 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   // Filter clients
   const filteredClients = useMemo(() => {
     return activeClients.filter((client) => {
-      // Search across GSTIN, Firm Name, Client Name, Mobile 1, Mobile 2
+      // Search across File No, GSTIN, Firm Name, Client Name, Mobile 1, Mobile 2
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
+        const matchesFileNo = client.file_no ? client.file_no.toLowerCase().includes(q) : false;
         const matchesGSTIN = client.gstin.toLowerCase().includes(q);
         const matchesFirm = client.firm_name.toLowerCase().includes(q);
         const matchesClient = client.client_name ? client.client_name.toLowerCase().includes(q) : false;
         const matchesMobile1 = client.mobile ? client.mobile.includes(q) : false;
         const matchesMobile2 = client.alternate_mobile ? client.alternate_mobile.includes(q) : false;
-        if (!matchesGSTIN && !matchesFirm && !matchesClient && !matchesMobile1 && !matchesMobile2) return false;
+        if (!matchesFileNo && !matchesGSTIN && !matchesFirm && !matchesClient && !matchesMobile1 && !matchesMobile2) return false;
       }
 
       // Scheme / Category
@@ -559,7 +560,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
           <input
             id="monthly-work-search-input"
             type="text"
-            placeholder="Search by Firm, GSTIN or Mobile..."
+            placeholder="Search by File No, Firm, GSTIN or Mobile..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#78350F] focus:bg-white"
@@ -749,8 +750,15 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
 
                       {/* Client / Firm Name & Permanent Mobile 1 and Mobile 2 */}
                       <td className="px-4 py-3">
-                        <div className="font-bold text-slate-900 leading-tight text-xs">
-                          {client.firm_name}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {client.file_no && (
+                            <span className="font-mono text-[10px] font-bold text-[#78350F] bg-[#FAF6F0] px-1.5 py-0.5 rounded border border-[#E8DCC4]" title={`File No: ${client.file_no}`}>
+                              📁 {client.file_no}
+                            </span>
+                          )}
+                          <div className="font-bold text-slate-900 leading-tight text-xs">
+                            {client.firm_name}
+                          </div>
                         </div>
                         {/* Permanently displayed Mobile 1 & Mobile 2 directly underneath */}
                         <div className="text-[11px] font-mono mt-1 space-y-0.5">

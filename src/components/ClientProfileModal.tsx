@@ -337,6 +337,11 @@ export const ClientProfileModal: React.FC<ClientProfileModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
+                {client.file_no && (
+                  <span className="font-mono text-xs font-bold text-[#78350F] bg-[#FAF6F0] px-2 py-0.5 rounded border border-[#E8DCC4]" title="File No">
+                    📁 {client.file_no}
+                  </span>
+                )}
                 <h3 className="font-bold text-slate-900 text-base">{client.firm_name}</h3>
                 <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                   {client.gstin}
@@ -352,6 +357,7 @@ export const ClientProfileModal: React.FC<ClientProfileModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
+                {client.file_no ? <><span className="text-[#78350F] font-bold">File #{client.file_no}</span> • </> : null}
                 Contact: <strong className="text-slate-700">{client.client_name}</strong> • Phone:{' '}
                 <strong className="text-slate-700">{client.mobile}</strong>
               </p>

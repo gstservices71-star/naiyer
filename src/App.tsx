@@ -318,10 +318,12 @@ export default function App() {
   const handleExportClientsCSV = () => {
     const header = [
       'Client ID',
+      'File No',
       'GSTIN',
       'Firm Name',
       'Client Name',
       'Mobile',
+      'Alternate Mobile',
       'Email',
       'Address',
       'City',
@@ -332,10 +334,12 @@ export default function App() {
     ];
     const rows = clients.map((c) => [
       c.id,
+      `"${c.file_no || ''}"`,
       `"${c.gstin}"`,
       `"${c.firm_name.replace(/"/g, '""')}"`,
       `"${c.client_name.replace(/"/g, '""')}"`,
       `"${c.mobile}"`,
+      `"${c.alternate_mobile || ''}"`,
       `"${c.email || ''}"`,
       `"${(c.address || '').replace(/"/g, '""')}"`,
       `"${c.city || ''}"`,
@@ -364,9 +368,12 @@ export default function App() {
       .forEach((r) => workMap.set(r.client_id, r));
 
     const header = [
+      'File No',
       'GSTIN',
       'Firm Name',
       'Client Name',
+      'Mobile',
+      'Alternate Mobile',
       'Scheme',
       'Staff',
       'Status',
@@ -379,9 +386,12 @@ export default function App() {
         const rec = workMap.get(c.id);
         const staff = users.find((u) => u.id === c.assigned_staff_id);
         return [
+          `"${c.file_no || ''}"`,
           `"${c.gstin}"`,
           `"${c.firm_name.replace(/"/g, '""')}"`,
           `"${c.client_name.replace(/"/g, '""')}"`,
+          `"${c.mobile}"`,
+          `"${c.alternate_mobile || ''}"`,
           c.gst_type,
           `"${staff ? staff.name : 'Unassigned'}"`,
           rec ? rec.status : 'Not Started',
