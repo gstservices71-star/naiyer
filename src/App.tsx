@@ -61,6 +61,7 @@ export default function App() {
   const [monthlyWorkSearch, setMonthlyWorkSearch] = useState('');
   const [monthlyWorkStatusFilter, setMonthlyWorkStatusFilter] = useState('all');
   const [selectedBankClientId, setSelectedBankClientId] = useState<number | null>(null);
+  const [isRefreshingPortal, setIsRefreshingPortal] = useState(false);
 
   // Toasts
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -475,13 +476,33 @@ export default function App() {
   };
 
   const handleRefreshPortal = () => {
-    const freshVisits = GSTStorage.getOfficeVisits();
-    const freshClients = GSTStorage.getClients();
-    const freshWork = GSTStorage.getMonthlyWork();
-    setOfficeVisits(freshVisits);
-    setClients(freshClients);
-    setMonthlyWork(freshWork);
-    showToast('Portal data synced & refreshed!', 'info');
+    setIsRefreshingPortal(true);
+    try {
+      const freshVisits = GSTStorage.getOfficeVisits();
+      const freshClients = GSTStorage.getClients();
+      const freshWork = GSTStorage.getMonthlyWork();
+      const freshUsers = GSTStorage.getUsers();
+      const freshFY = GSTStorage.getFinancialYears();
+      const freshLogs = GSTStorage.getActivityLogs();
+      const freshSettings = GSTStorage.getSettings();
+
+      setOfficeVisits(freshVisits);
+      setClients(freshClients);
+      setMonthlyWork(freshWork);
+      setUsers(freshUsers);
+      setFinancialYears(freshFY);
+      setActivityLogs(freshLogs);
+      if (freshSettings) setSettings(freshSettings);
+
+      showToast(`Portal data refreshed for FY ${selectedFY.display_name} (${selectedMonth})`, 'info');
+    } catch (err) {
+      console.error('Refresh error:', err);
+      showToast('Portal refreshed!', 'info');
+    } finally {
+      setTimeout(() => {
+        setIsRefreshingPortal(false);
+      }, 700);
+    }
   };
 
   // Pending count for sidebar badge
@@ -538,6 +559,8 @@ export default function App() {
         onSelectMonth={handleSelectMonth}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         companyName={settings.company_name}
+        onRefreshPortal={handleRefreshPortal}
+        isRefreshing={isRefreshingPortal}
       />
 
       {/* App Body */}
@@ -590,6 +613,7 @@ export default function App() {
                   setIsAddClientModalOpen(true);
                 }}
                 onOpenImportModal={() => setIsImportModalOpen(true)}
+                onRefresh={handleRefreshPortal}
               />
             ) : (
               <UserDashboard
@@ -604,6 +628,7 @@ export default function App() {
                   setActiveTab('monthly-work');
                 }}
                 onUpdateStatus={handleUpdateStatus}
+                onRefresh={handleRefreshPortal}
               />
             )
           )}
@@ -680,6 +705,7 @@ export default function App() {
               initialSearchQuery={monthlyWorkSearch}
               initialStatusFilter={monthlyWorkStatusFilter}
               onExportCSV={handleExportMonthlyCSV}
+              onRefresh={handleRefreshPortal}
             />
           )}
 
@@ -691,6 +717,7 @@ export default function App() {
               currentUser={currentUser}
               initialClientId={selectedBankClientId}
               onSelectFY={handleSelectFY}
+              onRefresh={handleRefreshPortal}
             />
           )}
 

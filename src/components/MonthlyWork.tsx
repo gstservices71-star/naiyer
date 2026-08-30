@@ -49,6 +49,7 @@ interface MonthlyWorkProps {
   initialSearchQuery?: string;
   initialStatusFilter?: string;
   onExportCSV?: () => void;
+  onRefresh?: () => void;
 }
 
 const STATUS_OPTIONS: WorkStatus[] = [
@@ -95,6 +96,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   initialSearchQuery = '',
   initialStatusFilter = 'all',
   onExportCSV,
+  onRefresh,
 }) => {
   const [searchTerm, setSearchTerm] = useState(initialSearchQuery);
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
@@ -105,6 +107,19 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   const [draftStatuses, setDraftStatuses] = useState<Record<number, WorkStatus>>({});
   const [draftRemarks, setDraftRemarks] = useState<Record<number, string>>({});
   const [savedRowIds, setSavedRowIds] = useState<Record<number, boolean>>({});
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshClick = () => {
+    setIsRefreshing(true);
+    setDraftStatuses({});
+    setDraftRemarks({});
+    if (onRefresh) {
+      onRefresh();
+    }
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 600);
+  };
 
   // Selection state for granular exports
   const [selectedClientIds, setSelectedClientIds] = useState<Set<number>>(new Set());
@@ -366,9 +381,9 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
           </p>
         </div>
 
-        {/* Month & FY Switcher and Export Buttons */}
+        {/* Month & FY Switcher, Refresh, and Export Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center bg-blue-50 border border-blue-200 rounded-xl px-3 py-1.5 text-xs">
+          <div className="flex items-center bg-blue-50 border border-blue-200 rounded-xl px-3 py-1.5 text-xs shadow-2xs">
             <Calendar className="w-3.5 h-3.5 text-blue-600 mr-1.5" />
             <span className="font-bold text-blue-900 mr-1">FY:</span>
             <select
@@ -388,7 +403,7 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs">
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs shadow-2xs">
             <Clock className="w-3.5 h-3.5 text-slate-600 mr-1.5" />
             <span className="font-bold text-slate-700 mr-1">Month:</span>
             <select
@@ -404,6 +419,22 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Dedicated Refresh Button for Selected FY & Month */}
+          <button
+            id="monthly-work-refresh-btn"
+            onClick={handleRefreshClick}
+            disabled={isRefreshing}
+            className={`flex items-center gap-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border shadow-xs transition-all cursor-pointer ${
+              isRefreshing
+                ? 'bg-blue-100 text-blue-900 border-blue-300'
+                : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300'
+            }`}
+            title={`Refresh and reload all GST work records for FY ${selectedFY.display_name} (${selectedMonth})`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-800' : 'text-blue-600'}`} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
 
           {/* Export Filtered CSV */}
           <button

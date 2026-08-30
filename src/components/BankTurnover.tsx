@@ -34,6 +34,7 @@ import {
   Clock,
   Sparkles,
   Info,
+  RefreshCw,
 } from 'lucide-react';
 
 interface BankTurnoverProps {
@@ -43,6 +44,7 @@ interface BankTurnoverProps {
   currentUser: User;
   initialClientId?: number | null;
   onSelectFY: (fy: FinancialYear) => void;
+  onRefresh?: () => void;
 }
 
 export const BankTurnover: React.FC<BankTurnoverProps> = ({
@@ -52,12 +54,14 @@ export const BankTurnover: React.FC<BankTurnoverProps> = ({
   currentUser,
   initialClientId,
   onSelectFY,
+  onRefresh,
 }) => {
   const [selectedClientId, setSelectedClientId] = useState<number>(
     initialClientId || (clients.length > 0 ? clients[0].id : 0)
   );
   const [clientSearch, setClientSearch] = useState('');
   const [activeTabSlot, setActiveTabSlot] = useState<BankAccountSlot | 'all'>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // State loaded from GSTStorage
   const [bankAccounts, setBankAccounts] = useState<ClientBankAccount[]>([]);
@@ -386,6 +390,19 @@ export const BankTurnover: React.FC<BankTurnoverProps> = ({
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
+  const handleRefreshTurnover = () => {
+    setIsRefreshing(true);
+    loadData();
+    if (onRefresh) {
+      onRefresh();
+    }
+    setSaveStatus(`Bank turnover data refreshed for FY ${selectedFY.display_name}.`);
+    setTimeout(() => {
+      setIsRefreshing(false);
+      setSaveStatus(null);
+    }, 1500);
+  };
+
   return (
     <div className="space-y-6 font-sans">
       {/* Toast Notification */}
@@ -420,10 +437,10 @@ export const BankTurnover: React.FC<BankTurnoverProps> = ({
           </div>
         </div>
 
-        {/* Global Controls: Financial Year & Bulk Save */}
+        {/* Global Controls: Financial Year, Refresh & Bulk Save */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* FY Selector */}
-          <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs">
+          <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs shadow-2xs">
             <Calendar className="w-3.5 h-3.5 text-slate-500" />
             <span className="text-slate-500 font-medium">Financial Year:</span>
             <select
@@ -443,10 +460,26 @@ export const BankTurnover: React.FC<BankTurnoverProps> = ({
             </select>
           </div>
 
+          {/* Dedicated Refresh Button */}
+          <button
+            id="bank-turnover-refresh-btn"
+            onClick={handleRefreshTurnover}
+            disabled={isRefreshing}
+            className={`flex items-center gap-1.5 font-bold text-xs px-3.5 py-2 rounded-xl border shadow-xs transition-all cursor-pointer ${
+              isRefreshing
+                ? 'bg-blue-100 text-blue-900 border-blue-300'
+                : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300'
+            }`}
+            title={`Refresh turnover, bank accounts and statements for FY ${selectedFY.display_name}`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-800' : 'text-blue-600'}`} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+
           <button
             id="save-all-turnover-btn"
             onClick={handleSaveAllAccounts}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
           >
             <Save className="w-3.5 h-3.5" />
             <span>Save All Turnover</span>

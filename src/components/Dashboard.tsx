@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Landmark,
   FileText,
+  RefreshCw,
 } from 'lucide-react';
 import {
   PieChart,
@@ -53,6 +54,7 @@ interface DashboardProps {
   onNavigateTab: (tab: any, filterStatus?: string) => void;
   onOpenAddClient: () => void;
   onOpenImportModal: () => void;
+  onRefresh?: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -77,7 +79,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateTab,
   onOpenAddClient,
   onOpenImportModal,
+  onRefresh,
 }) => {
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+
+  const handleRefreshClick = () => {
+    setIsRefreshing(true);
+    if (onRefresh) onRefresh();
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 600);
+  };
+
   // Current month work map
   const activeClients = clients.filter((c) => c.status === 'active');
   const currentMonthRecords = monthlyWork.filter(
@@ -194,11 +207,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-3 self-start md:self-auto">
+          <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
+            <button
+              id="dashboard-refresh-btn"
+              onClick={handleRefreshClick}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 bg-blue-900/60 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl border border-blue-400/30 shadow-xs transition-colors cursor-pointer"
+              title="Refresh Dashboard & Compliance Metrics"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-300' : 'text-blue-200'}`} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
             <button
               id="dashboard-quick-add-client-btn"
               onClick={onOpenAddClient}
-              className="flex items-center gap-1.5 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors"
+              className="flex items-center gap-1.5 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Add Client</span>
@@ -206,7 +229,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <button
               id="dashboard-quick-track-btn"
               onClick={() => onNavigateTab('monthly-work')}
-              className="flex items-center gap-1.5 bg-blue-600/80 hover:bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-blue-400/40 shadow-xs transition-colors"
+              className="flex items-center gap-1.5 bg-blue-600/80 hover:bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-blue-400/40 shadow-xs transition-colors cursor-pointer"
             >
               <FileCheck className="w-4 h-4" />
               <span>Monthly Work Tracker</span>

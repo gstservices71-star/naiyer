@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Client, FinancialYear, MonthlyWork, User, WorkStatus, FY_MONTHS } from '../types';
 import {
   Users,
@@ -11,6 +11,7 @@ import {
   Shield,
   ArrowRight,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 
 interface UserDashboardProps {
@@ -22,6 +23,7 @@ interface UserDashboardProps {
   onSelectMonth: (month: string) => void;
   onNavigateToMonthlyWork: (filter?: string) => void;
   onUpdateStatus: (fyId: number, month: string, clientId: number, status: WorkStatus, remark: string) => void;
+  onRefresh?: () => void;
 }
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({
@@ -33,7 +35,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   onSelectMonth,
   onNavigateToMonthlyWork,
   onUpdateStatus,
+  onRefresh,
 }) => {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshClick = () => {
+    setIsRefreshing(true);
+    if (onRefresh) onRefresh();
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 600);
+  };
   // Filter clients assigned to this user (or all if none assigned yet)
   const myClients = clients.filter(
     (c) => c.assigned_staff_id === currentUser.id && c.status === 'active'
@@ -81,20 +93,33 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </p>
           </div>
 
-          {/* Month Quick Picker */}
-          <div className="flex items-center gap-2 bg-slate-800/80 p-2 rounded-xl border border-slate-700">
-            <span className="text-xs text-slate-300 font-medium pl-1">Month:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => onSelectMonth(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-white text-xs font-bold rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:border-blue-500"
+          {/* Month Quick Picker & Refresh Button */}
+          <div className="flex items-center gap-2">
+            <button
+              id="staff-dashboard-refresh-btn"
+              onClick={handleRefreshClick}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs px-3 py-2 rounded-xl border border-slate-700 transition-all cursor-pointer shadow-xs"
+              title="Refresh Staff Portal Data"
             >
-              {FY_MONTHS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-400' : 'text-blue-300'}`} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+
+            <div className="flex items-center gap-2 bg-slate-800/80 p-1.5 rounded-xl border border-slate-700">
+              <span className="text-xs text-slate-300 font-medium pl-1">Month:</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => onSelectMonth(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-white text-xs font-bold rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:border-blue-500 cursor-pointer"
+              >
+                {FY_MONTHS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
