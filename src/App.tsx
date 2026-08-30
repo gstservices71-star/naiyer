@@ -60,6 +60,7 @@ export default function App() {
   // Routing query filter to monthly work
   const [monthlyWorkSearch, setMonthlyWorkSearch] = useState('');
   const [monthlyWorkStatusFilter, setMonthlyWorkStatusFilter] = useState('all');
+  const [monthlyWorkSchemeFilter, setMonthlyWorkSchemeFilter] = useState('all');
   const [selectedBankClientId, setSelectedBankClientId] = useState<number | null>(null);
   const [isRefreshingPortal, setIsRefreshingPortal] = useState(false);
 
@@ -599,11 +600,17 @@ export default function App() {
                 selectedMonth={selectedMonth}
                 users={users}
                 activityLogs={activityLogs}
-                onNavigateTab={(tab, filterStatus) => {
+                officeVisits={officeVisits}
+                onNavigateTab={(tab, filterStatus, filterScheme) => {
                   if (filterStatus) {
                     setMonthlyWorkStatusFilter(filterStatus);
                   } else {
                     setMonthlyWorkStatusFilter('all');
+                  }
+                  if (filterScheme) {
+                    setMonthlyWorkSchemeFilter(filterScheme);
+                  } else {
+                    setMonthlyWorkSchemeFilter('all');
                   }
                   setMonthlyWorkSearch('');
                   setActiveTab(tab);
@@ -622,11 +629,13 @@ export default function App() {
                 monthlyWork={monthlyWork}
                 selectedFY={selectedFY}
                 selectedMonth={selectedMonth}
+                officeVisits={officeVisits}
                 onSelectMonth={handleSelectMonth}
                 onNavigateToMonthlyWork={(filter) => {
                   if (filter) setMonthlyWorkStatusFilter(filter);
                   setActiveTab('monthly-work');
                 }}
+                onNavigateTab={(tab) => setActiveTab(tab)}
                 onUpdateStatus={handleUpdateStatus}
                 onRefresh={handleRefreshPortal}
               />
@@ -704,6 +713,7 @@ export default function App() {
               onUpdateStatus={handleUpdateStatus}
               initialSearchQuery={monthlyWorkSearch}
               initialStatusFilter={monthlyWorkStatusFilter}
+              initialSchemeFilter={monthlyWorkSchemeFilter}
               onExportCSV={handleExportMonthlyCSV}
               onRefresh={handleRefreshPortal}
             />

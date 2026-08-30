@@ -5,6 +5,7 @@ import {
   FinancialYear,
   FY_MONTHS,
   MonthlyWork,
+  OfficeVisit,
   User,
   WorkStatus,
 } from '../types';
@@ -26,6 +27,13 @@ import {
   Landmark,
   FileText,
   RefreshCw,
+  UserCheck,
+  Building2,
+  LogIn,
+  LogOut,
+  BadgePercent,
+  Sparkles,
+  Phone,
 } from 'lucide-react';
 import {
   PieChart,
@@ -51,7 +59,8 @@ interface DashboardProps {
   selectedMonth: string;
   users: User[];
   activityLogs: ActivityLog[];
-  onNavigateTab: (tab: any, filterStatus?: string) => void;
+  officeVisits?: OfficeVisit[];
+  onNavigateTab: (tab: any, filterStatus?: string, filterScheme?: string) => void;
   onOpenAddClient: () => void;
   onOpenImportModal: () => void;
   onRefresh?: () => void;
@@ -68,6 +77,14 @@ const STATUS_COLORS: Record<string, string> = {
   Other: '#64748b',
 };
 
+export const getSchemeCategory = (val?: string): 'Normal' | 'Composition' | 'QRMP' => {
+  if (!val) return 'Normal';
+  const c = val.trim().toLowerCase();
+  if (c === 'composition') return 'Composition';
+  if (c === 'qrmp') return 'QRMP';
+  return 'Normal';
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({
   clients,
   monthlyWork,
@@ -76,6 +93,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   selectedMonth,
   users,
   activityLogs,
+  officeVisits = [],
   onNavigateTab,
   onOpenAddClient,
   onOpenImportModal,
@@ -127,17 +145,69 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalPending =
     pendingGeneral + billPending + taxPaymentPending + docsPending + clientResponsePending + other;
 
-  const regularClients = activeClients.filter((c) => c.gst_type === 'regular').length;
-  const compositionClients = activeClients.filter((c) => c.gst_type === 'composition').length;
+  // Split Taxpayers by Normal vs Composition vs QRMP
+  const normalClients = activeClients.filter((c) => getSchemeCategory(c.gst_type) === 'Normal');
+  const compositionClients = activeClients.filter((c) => getSchemeCategory(c.gst_type) === 'Composition');
+  const qrmpClients = activeClients.filter((c) => getSchemeCategory(c.gst_type) === 'QRMP');
+
+  // Normal scheme stats
+  let normalCompleted = 0;
+  let normalPending = 0;
+  let normalNotStarted = 0;
+  normalClients.forEach((c) => {
+    const st = workMap.get(c.id)?.status || 'Not Started';
+    if (st === 'Completed') normalCompleted++;
+    else if (st === 'Not Started') normalNotStarted++;
+    else normalPending++;
+  });
+  const normalCompRate = normalClients.length > 0 ? Math.round((normalCompleted / normalClients.length) * 100) : 0;
+
+  // Composition scheme stats
+  let compCompleted = 0;
+  let compPending = 0;
+  let compNotStarted = 0;
+  compositionClients.forEach((c) => {
+    const st = workMap.get(c.id)?.status || 'Not Started';
+    if (st === 'Completed') compCompleted++;
+    else if (st === 'Not Started') compNotStarted++;
+    else compPending++;
+  });
+  const compCompRate = compositionClients.length > 0 ? Math.round((compCompleted / compositionClients.length) * 100) : 0;
+
+  // QRMP scheme stats
+  let qrmpCompleted = 0;
+  let qrmpPending = 0;
+  let qrmpNotStarted = 0;
+  qrmpClients.forEach((c) => {
+    const st = workMap.get(c.id)?.status || 'Not Started';
+    if (st === 'Completed') qrmpCompleted++;
+    else if (st === 'Not Started') qrmpNotStarted++;
+    else qrmpPending++;
+  });
+  const qrmpCompRate = qrmpClients.length > 0 ? Math.round((qrmpCompleted / qrmpClients.length) * 100) : 0;
 
   const completionRate =
     activeClients.length > 0 ? Math.round((completed / activeClients.length) * 100) : 0;
 
-  // Chart 1: Scheme Distribution
+  // Chart 1: Scheme Distribution (Normal, Composition, QRMP)
   const schemeData = [
-    { name: 'Regular (GSTR-1/3B)', value: regularClients, color: '#2563eb' },
-    { name: 'Composition (CMP-08)', value: compositionClients, color: '#8b5cf6' },
-  ];
+    { name: 'Normal (Monthly GSTR-1/3B)', value: normalClients.length, color: '#2563eb' },
+    { name: 'Composition (CMP-08)', value: compositionClients.length, color: '#8b5cf6' },
+    { name: 'QRMP (Quarterly+IFF)', value: qrmpClients.length, color: '#f97316' },
+  ].filter((s) => s.value > 0);
+
+  // Office Visits Stats
+  const todayStr = new Date().toISOString().split('T')[0];
+  const activeInOfficeVisits = officeVisits.filter((v) => v.status === 'IN');
+  const todayVisits = officeVisits.filter((v) => v.visit_date === todayStr);
+  const monthVisits = officeVisits.filter(
+    (v) => v.financial_year_id === selectedFY.id && v.month === selectedMonth
+  );
+
+  // Recent visits (sorted latest first)
+  const recentVisits = [...officeVisits]
+    .sort((a, b) => new Date(b.created_at || b.visit_date).getTime() - new Date(a.created_at || a.visit_date).getTime())
+    .slice(0, 6);
 
   // Chart 2: Status Breakdown
   const statusData = [
@@ -272,9 +342,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="text-2xl font-black text-slate-900 group-hover:text-blue-600">
             {activeClients.length}
           </div>
-          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>Reg: {regularClients}</span>
-            <span>Cmp: {compositionClients}</span>
+          <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between gap-1 flex-wrap font-medium">
+            <span className="text-blue-700 font-bold">Norm: {normalClients.length}</span>
+            <span className="text-purple-700 font-bold">Cmp: {compositionClients.length}</span>
+            <span className="text-orange-700 font-bold">QRMP: {qrmpClients.length}</span>
           </div>
         </div>
 
@@ -348,6 +419,158 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
           <div className="text-2xl font-black text-slate-800">{notStarted}</div>
           <div className="text-[11px] text-slate-500 mt-1">Initial state</div>
+        </div>
+      </div>
+
+      {/* TAXPAYER SCHEME SPLIT: Normal vs Composition vs QRMP (User Requested) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100">
+          <div>
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <BadgePercent className="w-4 h-4 text-blue-600" />
+              <span>Taxpayer Scheme Split & Compliance Status ({selectedMonth})</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Client categorization across Normal / Regular, Composition, and QRMP schemes
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <span>Total Base: {activeClients.length} Clients</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Normal / Regular Card */}
+          <div
+            id="scheme-card-normal"
+            onClick={() => onNavigateTab('monthly-work', 'all', 'Normal')}
+            className="p-4 rounded-xl border-2 border-blue-200 bg-blue-50/40 hover:bg-blue-50/80 hover:border-blue-400 transition-all cursor-pointer shadow-2xs group"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-blue-600 text-white uppercase tracking-wider">
+                Normal / Regular
+              </span>
+              <span className="text-xs font-bold text-blue-800">
+                {normalClients.length > 0 ? ((normalClients.length / (activeClients.length || 1)) * 100).toFixed(0) : 0}% Share
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-2xl font-black text-slate-900 group-hover:text-blue-700">
+                {normalClients.length}
+              </span>
+              <span className="text-xs font-bold text-slate-500">Clients</span>
+            </div>
+            <div className="text-[11px] text-slate-600 font-medium mt-1">
+              Monthly Return Filing (GSTR-1 & 3B)
+            </div>
+
+            {/* Compliance bar */}
+            <div className="mt-3 pt-3 border-t border-blue-200/60">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="font-bold text-slate-700">Completion:</span>
+                <span className="font-black text-blue-700">{normalCompRate}% ({normalCompleted}/{normalClients.length})</span>
+              </div>
+              <div className="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-blue-600 h-full rounded-full transition-all"
+                  style={{ width: `${normalCompRate}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2">
+                <span className="text-emerald-700 font-bold">✓ {normalCompleted} Done</span>
+                <span className="text-amber-700 font-bold">⏳ {normalPending} Pend</span>
+                <span className="text-slate-500 font-bold">○ {normalNotStarted} Unstarted</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Composition Scheme Card */}
+          <div
+            id="scheme-card-composition"
+            onClick={() => onNavigateTab('monthly-work', 'all', 'Composition')}
+            className="p-4 rounded-xl border-2 border-purple-200 bg-purple-50/40 hover:bg-purple-50/80 hover:border-purple-400 transition-all cursor-pointer shadow-2xs group"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-purple-600 text-white uppercase tracking-wider">
+                Composition
+              </span>
+              <span className="text-xs font-bold text-purple-800">
+                {compositionClients.length > 0 ? ((compositionClients.length / (activeClients.length || 1)) * 100).toFixed(0) : 0}% Share
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-2xl font-black text-slate-900 group-hover:text-purple-700">
+                {compositionClients.length}
+              </span>
+              <span className="text-xs font-bold text-slate-500">Clients</span>
+            </div>
+            <div className="text-[11px] text-slate-600 font-medium mt-1">
+              Quarterly CMP-08 & Annual GSTR-4
+            </div>
+
+            {/* Compliance bar */}
+            <div className="mt-3 pt-3 border-t border-purple-200/60">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="font-bold text-slate-700">Completion:</span>
+                <span className="font-black text-purple-700">{compCompRate}% ({compCompleted}/{compositionClients.length})</span>
+              </div>
+              <div className="w-full bg-purple-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-purple-600 h-full rounded-full transition-all"
+                  style={{ width: `${compCompRate}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2">
+                <span className="text-emerald-700 font-bold">✓ {compCompleted} Done</span>
+                <span className="text-amber-700 font-bold">⏳ {compPending} Pend</span>
+                <span className="text-slate-500 font-bold">○ {compNotStarted} Unstarted</span>
+              </div>
+            </div>
+          </div>
+
+          {/* QRMP Scheme Card */}
+          <div
+            id="scheme-card-qrmp"
+            onClick={() => onNavigateTab('monthly-work', 'all', 'QRMP')}
+            className="p-4 rounded-xl border-2 border-orange-200 bg-orange-50/40 hover:bg-orange-50/80 hover:border-orange-400 transition-all cursor-pointer shadow-2xs group"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-orange-600 text-white uppercase tracking-wider">
+                QRMP Scheme
+              </span>
+              <span className="text-xs font-bold text-orange-800">
+                {qrmpClients.length > 0 ? ((qrmpClients.length / (activeClients.length || 1)) * 100).toFixed(0) : 0}% Share
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-2xl font-black text-slate-900 group-hover:text-orange-700">
+                {qrmpClients.length}
+              </span>
+              <span className="text-xs font-bold text-slate-500">Clients</span>
+            </div>
+            <div className="text-[11px] text-slate-600 font-medium mt-1">
+              Quarterly Return + Monthly Payment (IFF)
+            </div>
+
+            {/* Compliance bar */}
+            <div className="mt-3 pt-3 border-t border-orange-200/60">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="font-bold text-slate-700">Completion:</span>
+                <span className="font-black text-orange-700">{qrmpCompRate}% ({qrmpCompleted}/{qrmpClients.length})</span>
+              </div>
+              <div className="w-full bg-orange-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-orange-600 h-full rounded-full transition-all"
+                  style={{ width: `${qrmpCompRate}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2">
+                <span className="text-emerald-700 font-bold">✓ {qrmpCompleted} Done</span>
+                <span className="text-amber-700 font-bold">⏳ {qrmpPending} Pend</span>
+                <span className="text-slate-500 font-bold">○ {qrmpNotStarted} Unstarted</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -464,7 +687,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">Taxpayer Scheme Split</h3>
-              <p className="text-xs text-slate-500">Regular Taxpayers vs Composition Scheme</p>
+              <p className="text-xs text-slate-500">Normal vs Composition vs QRMP Taxpayers</p>
             </div>
             <span className="text-xs bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md">
               Master Base
@@ -497,6 +720,190 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
+
+      {/* OFFICE CLIENT ENTRY & VISIT REGISTER SECTION (User Requested) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <span>Office Client Entry & Visit Register</span>
+                  {activeInOfficeVisits.length > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      <span>{activeInOfficeVisits.length} In Office Now</span>
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Real-time client walk-ins, consultation logs, and office check-in / check-out records
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Metrics & Actions */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700">
+              <Clock className="w-3.5 h-3.5 text-blue-600" />
+              <span>Today: <strong className="text-slate-900">{todayVisits.length}</strong></span>
+              <span className="text-slate-300">|</span>
+              <span>Month: <strong className="text-slate-900">{monthVisits.length}</strong></span>
+            </div>
+
+            <button
+              id="dashboard-new-visit-btn"
+              onClick={() => onNavigateTab('office-visits')}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>+ Record Client Entry</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateTab('office-visits')}
+              className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 px-2.5 py-2 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
+            >
+              <span>Full Register ({officeVisits.length})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Office Entries Table */}
+        {recentVisits.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-y border-slate-100">
+                <tr>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="px-3 py-2.5">Client / Firm Name</th>
+                  <th className="px-3 py-2.5">Contact Person</th>
+                  <th className="px-3 py-2.5">Scheme / Type</th>
+                  <th className="px-3 py-2.5">Purpose of Visit</th>
+                  <th className="px-3 py-2.5">In / Out Time</th>
+                  <th className="px-3 py-2.5">Attended By</th>
+                  <th className="px-3 py-2.5">Remark / Note</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {recentVisits.map((visit) => {
+                  const clientObj = clients.find((c) => c.id === visit.client_id);
+                  const scheme = getSchemeCategory(clientObj?.gst_type || visit.gst_type);
+                  const isCurrentlyIn = visit.status === 'IN';
+
+                  return (
+                    <tr
+                      key={visit.id}
+                      className={`transition-colors ${
+                        isCurrentlyIn ? 'bg-emerald-50/40 hover:bg-emerald-50/70' : 'hover:bg-slate-50/60'
+                      }`}
+                    >
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {isCurrentlyIn ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500 text-white shadow-2xs animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                            <span>IN OFFICE</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                            <LogOut className="w-3 h-3 text-slate-400" />
+                            <span>OUT</span>
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-3 py-2.5 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900">{visit.firm_name}</span>
+                          {visit.file_no && (
+                            <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono font-bold">
+                              #{visit.file_no}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
+                          <span>{visit.visit_date}</span>
+                          <span>•</span>
+                          <span className={visit.client_type === 'registered' ? 'text-blue-600 font-semibold' : 'text-slate-500'}>
+                            {visit.client_type === 'registered' ? 'Registered Client' : 'New Visitor'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="font-semibold text-slate-800">{visit.contact_person || '—'}</div>
+                        {visit.mobile && (
+                          <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                            <Phone className="w-2.5 h-2.5 text-slate-400" />
+                            <span>{visit.mobile}</span>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            scheme === 'Normal'
+                              ? 'bg-blue-100 text-blue-800'
+                              : scheme === 'Composition'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-orange-100 text-orange-800'
+                          }`}
+                        >
+                          {scheme}
+                        </span>
+                      </td>
+
+                      <td className="px-3 py-2.5">
+                        <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[11px]">
+                          {visit.purpose || 'General Consultation'}
+                        </span>
+                      </td>
+
+                      <td className="px-3 py-2.5 whitespace-nowrap font-mono text-[11px]">
+                        <div className="text-emerald-700 font-bold">
+                          In: {visit.in_time || '—'}
+                        </div>
+                        <div className="text-slate-500 text-[10px]">
+                          Out: {visit.out_time ? visit.out_time : isCurrentlyIn ? 'Active Now' : '—'}
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-700 font-medium">
+                        {visit.attended_by_name || 'Assigned Staff'}
+                      </td>
+
+                      <td className="px-3 py-2.5 text-slate-600 text-[11px] max-w-xs truncate">
+                        {visit.remarks || visit.notes || '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+            <h4 className="text-xs font-bold text-slate-700">No Office Client Entries Logged Yet</h4>
+            <p className="text-[11px] text-slate-500 mt-0.5 max-w-md mx-auto">
+              Track walk-in visitors, consultations, document submissions, and in/out timings by recording the first entry.
+            </p>
+            <button
+              onClick={() => onNavigateTab('office-visits')}
+              className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-emerald-700 transition-colors"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Record First Office Client Entry</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Bottom Section: Quick Links & Recent Activity Trail */}

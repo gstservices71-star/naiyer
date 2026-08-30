@@ -83,41 +83,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Mobile backdrop */}
+      {/* Mobile backdrop - underneath heading bar */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden"
+          className="fixed inset-0 top-[54px] sm:top-[58px] bg-slate-950/60 backdrop-blur-xs z-30 lg:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
         id="app-sidebar"
-        className={`fixed lg:static top-0 left-0 bottom-0 w-64 bg-slate-900 text-white z-50 flex flex-col transition-transform duration-200 ease-in-out ${
+        className={`fixed lg:sticky top-[54px] sm:top-[58px] left-0 bottom-0 lg:bottom-auto lg:h-[calc(100vh-58px)] w-64 bg-slate-900 text-white z-40 flex flex-col shrink-0 transition-transform duration-200 ease-in-out border-r border-slate-800/80 shadow-xl lg:shadow-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
-              <Receipt className="w-4 h-4" />
+        {/* Compact Sidebar Header */}
+        <div className="p-3 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/40 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-2xs">
+              <Receipt className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="font-bold text-sm text-white tracking-wide">GST PORTAL</div>
-              <div className="text-[10px] text-slate-400 font-medium">PHP 8 & MySQL Suite</div>
+              <div className="font-bold text-xs text-white tracking-wide">CA OFFICE</div>
+              <div className="text-[9px] text-blue-300 font-semibold tracking-wider uppercase">Portal Suite</div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden cursor-pointer"
+            title="Close Sidebar"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Navigation items */}
-        <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+        {/* Navigation items - Smoothly scrollable with mouse cursor under heading bar */}
+        <div 
+          id="sidebar-menu-scroll-panel"
+          className="flex-1 overflow-y-auto custom-sidebar-scroll py-2 px-2 space-y-1 overscroll-contain"
+        >
           <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             Main Management
           </div>

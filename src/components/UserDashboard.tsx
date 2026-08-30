@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Client, FinancialYear, MonthlyWork, User, WorkStatus, FY_MONTHS } from '../types';
+import { Client, FinancialYear, MonthlyWork, OfficeVisit, User, WorkStatus, FY_MONTHS } from '../types';
 import {
   Users,
   CheckCircle2,
@@ -12,6 +12,11 @@ import {
   ArrowRight,
   Sparkles,
   RefreshCw,
+  BadgePercent,
+  Building2,
+  LogIn,
+  LogOut,
+  Phone,
 } from 'lucide-react';
 
 interface UserDashboardProps {
@@ -20,11 +25,21 @@ interface UserDashboardProps {
   monthlyWork: MonthlyWork[];
   selectedFY: FinancialYear;
   selectedMonth: string;
+  officeVisits?: OfficeVisit[];
   onSelectMonth: (month: string) => void;
   onNavigateToMonthlyWork: (filter?: string) => void;
+  onNavigateTab?: (tab: any) => void;
   onUpdateStatus: (fyId: number, month: string, clientId: number, status: WorkStatus, remark: string) => void;
   onRefresh?: () => void;
 }
+
+export const getSchemeCategory = (val?: string): 'Normal' | 'Composition' | 'QRMP' => {
+  if (!val) return 'Normal';
+  const c = val.trim().toLowerCase();
+  if (c === 'composition') return 'Composition';
+  if (c === 'qrmp') return 'QRMP';
+  return 'Normal';
+};
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({
   currentUser,
@@ -32,8 +47,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   monthlyWork,
   selectedFY,
   selectedMonth,
+  officeVisits = [],
   onSelectMonth,
   onNavigateToMonthlyWork,
+  onNavigateTab,
   onUpdateStatus,
   onRefresh,
 }) => {
@@ -72,6 +89,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const notStartedCount = displayClients.length - completedCount - pendingCount;
 
   const completionRate = displayClients.length > 0 ? Math.round((completedCount / displayClients.length) * 100) : 0;
+
+  // Taxpayer Scheme Breakdown for Assigned Clients
+  const normalClients = displayClients.filter((c) => getSchemeCategory(c.gst_type) === 'Normal');
+  const compositionClients = displayClients.filter((c) => getSchemeCategory(c.gst_type) === 'Composition');
+  const qrmpClients = displayClients.filter((c) => getSchemeCategory(c.gst_type) === 'QRMP');
+
+  // Office visits
+  const activeInOfficeVisits = officeVisits.filter((v) => v.status === 'IN');
+  const recentVisits = [...officeVisits]
+    .sort((a, b) => new Date(b.created_at || b.visit_date).getTime() - new Date(a.created_at || a.visit_date).getTime())
+    .slice(0, 4);
 
   return (
     <div className="space-y-6 font-sans">
@@ -182,6 +210,143 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           <div className="text-2xl font-black text-slate-700 mt-2">{notStartedCount > 0 ? notStartedCount : 0}</div>
           <div className="text-[11px] text-slate-500 mt-1">Awaiting initiation</div>
         </div>
+      </div>
+
+      {/* TAXPAYER SCHEME SPLIT */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <BadgePercent className="w-4 h-4 text-blue-600" />
+            <h3 className="font-bold text-slate-900 text-xs sm:text-sm">Assigned Clients Scheme Breakdown</h3>
+          </div>
+          <span className="text-[11px] font-bold text-slate-500">{displayClients.length} Total</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-bold text-blue-900">Normal / Regular</span>
+              <span className="font-black text-blue-700">{normalClients.length}</span>
+            </div>
+            <div className="text-[10px] text-blue-700">Monthly GSTR-1 & 3B filing</div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-200">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-bold text-purple-900">Composition</span>
+              <span className="font-black text-purple-700">{compositionClients.length}</span>
+            </div>
+            <div className="text-[10px] text-purple-700">Quarterly CMP-08 statement</div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-orange-50/60 border border-orange-200">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-bold text-orange-900">QRMP Scheme</span>
+              <span className="font-black text-orange-700">{qrmpClients.length}</span>
+            </div>
+            <div className="text-[10px] text-orange-700">Quarterly + IFF / PMT-06</div>
+          </div>
+        </div>
+      </div>
+
+      {/* OFFICE CLIENT ENTRY REGISTER SECTION FOR USER */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-emerald-600" />
+            <div>
+              <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                <span>Office Client Entries & Walk-ins</span>
+                {activeInOfficeVisits.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>{activeInOfficeVisits.length} In Office Now</span>
+                  </span>
+                )}
+              </h3>
+            </div>
+          </div>
+
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('office-visits')}
+              className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <span>Office Visit Register ({officeVisits.length})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {recentVisits.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-y border-slate-100">
+                <tr>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Firm / Client</th>
+                  <th className="px-3 py-2">Scheme</th>
+                  <th className="px-3 py-2">Purpose</th>
+                  <th className="px-3 py-2">Time</th>
+                  <th className="px-3 py-2">Attended By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {recentVisits.map((visit) => {
+                  const clientObj = clients.find((c) => c.id === visit.client_id);
+                  const scheme = getSchemeCategory(clientObj?.gst_type || visit.gst_type);
+                  const isCurrentlyIn = visit.status === 'IN';
+
+                  return (
+                    <tr key={visit.id} className={isCurrentlyIn ? 'bg-emerald-50/40' : 'hover:bg-slate-50/60'}>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {isCurrentlyIn ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500 text-white animate-pulse">
+                            IN OFFICE
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-slate-500">OUT</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-bold text-slate-900">
+                        <div className="flex items-center gap-1">
+                          <span>{visit.firm_name}</span>
+                          {visit.file_no && (
+                            <span className="text-[9px] bg-slate-100 text-slate-700 px-1 py-0.2 rounded font-mono">
+                              #{visit.file_no}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            scheme === 'Normal'
+                              ? 'bg-blue-100 text-blue-800'
+                              : scheme === 'Composition'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-orange-100 text-orange-800'
+                          }`}
+                        >
+                          {scheme}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{visit.purpose || 'Consultation'}</td>
+                      <td className="px-3 py-2 font-mono text-[10px] text-slate-600 whitespace-nowrap">
+                        In: {visit.in_time || '—'} {visit.out_time ? `| Out: ${visit.out_time}` : ''}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{visit.attended_by_name || 'Staff'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-4 text-center text-xs text-slate-500 bg-slate-50 rounded-xl">
+            No client visits logged today.
+          </div>
+        )}
       </div>
 
       {/* Fast Status Update Table for User */}

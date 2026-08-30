@@ -48,6 +48,7 @@ interface MonthlyWorkProps {
   ) => void;
   initialSearchQuery?: string;
   initialStatusFilter?: string;
+  initialSchemeFilter?: string;
   onExportCSV?: () => void;
   onRefresh?: () => void;
 }
@@ -95,13 +96,14 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
   onUpdateStatus,
   initialSearchQuery = '',
   initialStatusFilter = 'all',
+  initialSchemeFilter = 'all',
   onExportCSV,
   onRefresh,
 }) => {
   const [searchTerm, setSearchTerm] = useState(initialSearchQuery);
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
   const [staffFilter, setStaffFilter] = useState('all');
-  const [schemeFilter, setSchemeFilter] = useState('all');
+  const [schemeFilter, setSchemeFilter] = useState(initialSchemeFilter || 'all');
 
   // Draft local edits for instant responsive typing without lagging global store
   const [draftStatuses, setDraftStatuses] = useState<Record<number, WorkStatus>>({});
