@@ -77,13 +77,13 @@ const STATUS_OPTIONS: WorkStatus[] = [
   'Completed',
   'Nil Filed',
   'Data Received',
-  'In Process',
+  'RCM Pay',
   'Challan Generated',
   'Bill Pending',
   'Tax Payment Pending',
   'Documents Pending',
   'Client Response Pending',
-  'Client Delay',
+  'GSTR-1 Filed',
   'Other',
 ];
 
@@ -718,13 +718,13 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
               <option value="Completed">✓ Completed ({statusCounts.Completed})</option>
               <option value="Nil Filed">✓ Nil Filed ({statusCounts['Nil Filed'] || 0})</option>
               <option value="Data Received">📥 Data Received ({statusCounts['Data Received'] || 0})</option>
-              <option value="In Process">⏳ In Process ({statusCounts['In Process'] || 0})</option>
+              <option value="RCM Pay">💳 RCM PAY ({statusCounts['RCM Pay'] || 0})</option>
               <option value="Challan Generated">🧾 Challan Generated ({statusCounts['Challan Generated'] || 0})</option>
               <option value="Bill Pending">📄 Bill Pending ({statusCounts['Bill Pending'] || 0})</option>
               <option value="Tax Payment Pending">💰 Tax Payment Pending ({statusCounts['Tax Payment Pending'] || 0})</option>
               <option value="Documents Pending">📂 Documents Pending ({statusCounts['Documents Pending'] || 0})</option>
               <option value="Client Response Pending">📞 Client Response Pending ({statusCounts['Client Response Pending'] || 0})</option>
-              <option value="Client Delay">⚠️ Client Delay ({statusCounts['Client Delay'] || 0})</option>
+              <option value="GSTR-1 Filed">📋 GSTR-1 Filed ({statusCounts['GSTR-1 Filed'] || 0})</option>
               <option value="Not Started">⏸️ Not Started ({statusCounts['Not Started'] || 0})</option>
               <option value="Other">Other ({statusCounts['Other'] || 0})</option>
             </select>
@@ -834,14 +834,14 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter('Client Delay')}
+            onClick={() => setStatusFilter('GSTR-1 Filed')}
             className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-colors cursor-pointer ${
-              statusFilter === 'Client Delay'
-                ? 'bg-red-600 text-white'
-                : 'bg-red-50 text-red-700 hover:bg-red-100'
+              statusFilter === 'GSTR-1 Filed'
+                ? 'bg-sky-600 text-white'
+                : 'bg-sky-50 text-sky-700 hover:bg-sky-100'
             }`}
           >
-            Client Delay ({statusCounts['Client Delay'] || 0})
+            GSTR-1 Filed ({statusCounts['GSTR-1 Filed'] || 0})
           </button>
           <button
             type="button"
@@ -951,13 +951,13 @@ export const MonthlyWork: React.FC<MonthlyWorkProps> = ({
                     Completed: 'bg-emerald-50 text-emerald-800 border-emerald-300',
                     'Nil Filed': 'bg-teal-50 text-teal-800 border-teal-300',
                     'Data Received': 'bg-blue-50 text-blue-800 border-blue-300',
-                    'In Process': 'bg-indigo-50 text-indigo-800 border-indigo-300',
+                    'RCM Pay': 'bg-indigo-50 text-indigo-800 border-indigo-300',
                     'Challan Generated': 'bg-purple-50 text-purple-800 border-purple-300',
                     'Bill Pending': 'bg-orange-50 text-orange-800 border-orange-300',
                     'Tax Payment Pending': 'bg-rose-50 text-rose-800 border-rose-300',
                     'Documents Pending': 'bg-amber-50 text-amber-800 border-amber-300',
                     'Client Response Pending': 'bg-cyan-50 text-cyan-800 border-cyan-300',
-                    'Client Delay': 'bg-red-50 text-red-800 border-red-300',
+                    'GSTR-1 Filed': 'bg-sky-50 text-sky-800 border-sky-300',
                     'Not Started': 'bg-slate-50 text-slate-700 border-slate-300',
                     Pending: 'bg-amber-50 text-amber-800 border-amber-300',
                     Other: 'bg-slate-50 text-slate-700 border-slate-300',

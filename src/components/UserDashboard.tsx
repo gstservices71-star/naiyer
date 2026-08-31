@@ -416,6 +416,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                             : currentStatus === 'Pending'
                             ? 'bg-amber-50 text-amber-800 border-amber-300'
+                            : currentStatus === 'GSTR-1 Filed'
+                            ? 'bg-sky-50 text-sky-800 border-sky-300'
+                            : currentStatus === 'RCM Pay'
+                            ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
                             : currentStatus === 'Documents Pending'
                             ? 'bg-sky-50 text-sky-800 border-sky-300'
                             : currentStatus === 'Tax Payment Pending'
@@ -427,6 +431,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                       >
                         <option value="Not Started">Not Started</option>
                         <option value="Pending">Pending</option>
+                        <option value="GSTR-1 Filed">GSTR-1 Filed</option>
+                        <option value="RCM Pay">RCM PAY</option>
                         <option value="Documents Pending">Documents Pending</option>
                         <option value="Client Response Pending">Client Response Pending</option>
                         <option value="Tax Payment Pending">Tax Payment Pending</option>

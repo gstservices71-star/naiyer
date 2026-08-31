@@ -73,13 +73,13 @@ export type WorkStatus =
   | 'Completed'
   | 'Nil Filed'
   | 'Data Received'
-  | 'In Process'
+  | 'RCM Pay'
   | 'Challan Generated'
   | 'Bill Pending'
   | 'Tax Payment Pending'
   | 'Documents Pending'
   | 'Client Response Pending'
-  | 'Client Delay'
+  | 'GSTR-1 Filed'
   | 'Other';
 
 export interface MonthlyWork {
@@ -178,13 +178,13 @@ export const WORK_STATUSES: WorkStatus[] = [
   'Completed',
   'Nil Filed',
   'Data Received',
-  'In Process',
+  'RCM Pay',
   'Challan Generated',
   'Bill Pending',
   'Tax Payment Pending',
   'Documents Pending',
   'Client Response Pending',
-  'Client Delay',
+  'GSTR-1 Filed',
   'Other',
 ];
 
@@ -219,7 +219,7 @@ export const STATUS_COLORS: Record<WorkStatus, { bg: string; text: string; borde
     border: 'border-blue-200',
     badge: 'bg-blue-100 text-blue-800 border border-blue-300',
   },
-  'In Process': {
+  'RCM Pay': {
     bg: 'bg-indigo-50',
     text: 'text-indigo-700',
     border: 'border-indigo-200',
@@ -255,11 +255,11 @@ export const STATUS_COLORS: Record<WorkStatus, { bg: string; text: string; borde
     border: 'border-cyan-200',
     badge: 'bg-cyan-100 text-cyan-800 border border-cyan-300',
   },
-  'Client Delay': {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-200',
-    badge: 'bg-red-100 text-red-800 border border-red-300',
+  'GSTR-1 Filed': {
+    bg: 'bg-sky-50',
+    text: 'text-sky-700',
+    border: 'border-sky-200',
+    badge: 'bg-sky-100 text-sky-800 border border-sky-300',
   },
   'Other': {
     bg: 'bg-slate-50',

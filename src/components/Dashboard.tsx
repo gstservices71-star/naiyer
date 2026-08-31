@@ -203,14 +203,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Status counters for selected month
   let completed = 0;
   let nilFiled = 0;
-  let inProcess = 0;
+  let rcmPay = 0;
   let dataReceived = 0;
   let challanGenerated = 0;
   let billPending = 0;
   let taxPaymentPending = 0;
   let docsPending = 0;
   let clientResponsePending = 0;
-  let clientDelay = 0;
+  let gstr1Filed = 0;
   let notStarted = 0;
   let other = 0;
 
@@ -220,28 +220,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     if (status === 'Completed') completed++;
     else if (status === 'Nil Filed') nilFiled++;
-    else if (status === 'In Process') inProcess++;
+    else if (status === 'GSTR-1 Filed') gstr1Filed++;
+    else if (status === 'RCM Pay') rcmPay++;
     else if (status === 'Data Received') dataReceived++;
     else if (status === 'Challan Generated') challanGenerated++;
     else if (status === 'Bill Pending') billPending++;
     else if (status === 'Tax Payment Pending') taxPaymentPending++;
     else if (status === 'Documents Pending') docsPending++;
     else if (status === 'Client Response Pending') clientResponsePending++;
-    else if (status === 'Client Delay') clientDelay++;
     else if (status === 'Not Started') notStarted++;
     else other++;
   });
 
   const totalFiledOrDone = completed + nilFiled;
   const totalPendingAction =
-    inProcess +
+    rcmPay +
     dataReceived +
     challanGenerated +
     billPending +
     taxPaymentPending +
     docsPending +
     clientResponsePending +
-    clientDelay +
+    gstr1Filed +
     other;
 
   const completionRate =
@@ -670,7 +670,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     [officeVisits, selectedFY.id, selectedMonth]
   );
 
-  // Urgent Action Required Client List (Challan Pending, Tax Payment Pending, Docs Pending, Client Delay)
+  // Urgent Action Required Client List (Challan Pending, Tax Payment Pending, Docs Pending, Bill Pending, Client Response Pending)
   const urgentAttentionClients = useMemo(() => {
     const list: { client: Client; work: MonthlyWork }[] = [];
     activeClients.forEach((c) => {
@@ -682,7 +682,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           'Challan Generated',
           'Documents Pending',
           'Bill Pending',
-          'Client Delay',
           'Client Response Pending',
         ].includes(work.status)
       ) {
@@ -1363,7 +1362,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       Urgent Action Required Queue ({urgentAttentionClients.length})
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Tax payment blockers, documents pending, and client delays for {selectedMonth}
+                      Tax payment blockers, documents pending, and action follow-ups for {selectedMonth}
                     </p>
                   </div>
                 </div>
@@ -1478,9 +1477,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div className="flex items-center justify-between p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-xs">
                     <span className="font-bold text-indigo-900 flex items-center gap-1.5">
                       <Activity className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>In Process</span>
+                      <span>RCM PAY</span>
                     </span>
-                    <span className="font-mono font-black text-indigo-800">{inProcess}</span>
+                    <span className="font-mono font-black text-indigo-800">{rcmPay}</span>
                   </div>
 
                   <div className="flex items-center justify-between p-2 rounded-xl bg-blue-50 border border-blue-100 text-xs">
